@@ -3,3 +3,4 @@ mss
 chromadb
 Pillow
 pytesseract
+ollama

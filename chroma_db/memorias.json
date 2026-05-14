@@ -1,0 +1,11 @@
+[
+  {
+    "id": "2026-05-14T09:58:53.205639",
+    "document": "Observação: Teste persistencia\nPensamento: Isso e um teste",
+    "metadata": {
+      "timestamp": "2026-05-14T09:58:53.205639",
+      "tipo": "observacao_passiva"
+    },
+    "embedding": null
+  }
+]
