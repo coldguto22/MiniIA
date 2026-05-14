@@ -1,84 +1,84 @@
-import ollama
-import memoria
+# alimentar_memoria.py
+import chromadb
+import os
 from datetime import datetime
-import textwrap
-import sys
+import ollama  # Biblioteca Ollama para Python
 
-MAX_CHUNK = 500
+# Configuração do ChromaDB (mesmo diretório do memoria.py)
+PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
+client = chromadb.PersistentClient(path=PERSIST_DIR)
+colecao = client.get_or_create_collection(name="memoria_da_ia")
 
-
-def chunk_text(text, max_chars=MAX_CHUNK):
-    # Primeiro por parágrafos
-    parts = [p.strip() for p in text.split('\n\n') if p.strip()]
+def dividir_texto(texto, tamanho_max=500):
+    """Divide o texto em chunks menores, tentando quebrar em parágrafos ou frases."""
+    paragrafos = texto.split('\n')
     chunks = []
-    for p in parts:
-        if len(p) <= max_chars:
-            chunks.append(p)
+    atual = ""
+    for p in paragrafos:
+        if len(atual) + len(p) < tamanho_max:
+            atual += p + '\n'
         else:
-            # divide em fatias simples
-            for i in range(0, len(p), max_chars):
-                chunks.append(p[i:i+max_chars])
-    if not chunks:
-        # fallback: split por tamanho bruto
-        for i in range(0, len(text), max_chars):
-            chunks.append(text[i:i+max_chars])
-    return chunks
+            if atual.strip():
+                chunks.append(atual.strip())
+            atual = p + '\n'
+    if atual.strip():
+        chunks.append(atual.strip())
+    # Se algum chunk ainda for maior que o tamanho, divide por palavras
+    final_chunks = []
+    for c in chunks:
+        while len(c) > tamanho_max:
+            # Procura o último espaço antes do limite
+            ponto = c.rfind(' ', 0, tamanho_max)
+            if ponto == -1:
+                ponto = tamanho_max
+            final_chunks.append(c[:ponto].strip())
+            c = c[ponto:].strip()
+        if c:
+            final_chunks.append(c)
+    return final_chunks
 
-
-def get_embedding(text):
-    try:
-        resp = ollama.embeddings(model='nomic-embed-text', prompt=text)
-        # tentar extrair embedding de formatos comuns
-        if isinstance(resp, dict) and 'embedding' in resp:
-            return resp['embedding']
-        if isinstance(resp, list) and len(resp) > 0:
-            first = resp[0]
-            if isinstance(first, dict) and 'embedding' in first:
-                return first['embedding']
-            return first
-        return resp
-    except Exception as e:
-        print(f"Erro ao gerar embedding: {e}")
-        return None
-
+def gerar_embedding(texto):
+    """Gera embedding usando o modelo nomic-embed-text via Ollama."""
+    response = ollama.embeddings(model='nomic-embed-text', prompt=texto)
+    return response['embedding']
 
 def main():
     print("Cole o texto (termine com uma linha contendo apenas 'END'):")
-    lines = []
+    linhas = []
     while True:
-        try:
-            line = input()
-        except EOFError:
+        linha = input()
+        if linha.strip() == 'END':
             break
-        if line.strip() == 'END':
-            break
-        lines.append(line)
+        linhas.append(linha)
+    texto_completo = '\n'.join(linhas).strip()
+    
+    if not texto_completo:
+        print("❌ Nenhum texto fornecido.")
+        return
 
-    texto = '\n'.join(lines).strip()
-    if not texto:
-        print("Nenhum texto recebido. Abortando.")
-        sys.exit(0)
+    fonte = input("Fonte (ex: conversa_sobre_ser): ").strip()
+    tipo = input("Tipo (ex: conhecimento_fundacional): ").strip()
 
-    fonte = input("Fonte (ex: conversa_sobre_ser): ").strip() or "manual"
-    tipo = input("Tipo (ex: conhecimento_fundacional): ").strip() or "conhecimento_fundacional"
-
-    chunks = chunk_text(texto)
-    embeddings = []
-    metadatas = []
-    timestamp = datetime.now().isoformat()
+    chunks = dividir_texto(texto_completo)
     print(f"Gerando embeddings para {len(chunks)} chunk(s)...")
-    for i, c in enumerate(chunks):
-        emb = get_embedding(c)
-        embeddings.append(emb)
-        metadatas.append({"fonte": fonte, "tipo": tipo, "timestamp": timestamp, "chunk_index": i})
-    # Se algum embedding falhou (None), não passemos a lista incompleta ao ChromaDB
-    if any(e is None for e in embeddings):
-        print("Alguns embeddings falharam; armazenando sem embeddings.")
-        memoria.store_chunks(chunks, metadatas, embeddings=None)
-    else:
-        memoria.store_chunks(chunks, metadatas, embeddings=embeddings)
-    print(f"Concluído: {len(chunks)} chunk(s) armazenado(s).")
 
+    for i, chunk in enumerate(chunks):
+        emb = gerar_embedding(chunk)
+        timestamp = datetime.now().isoformat()
+        chunk_id = f"{timestamp}_{i}"
+        colecao.add(
+            documents=[chunk],
+            embeddings=[emb],
+            metadatas=[{
+                "fonte": fonte,
+                "tipo": tipo,
+                "timestamp": timestamp,
+                "chunk_index": i
+            }],
+            ids=[chunk_id]
+        )
+    
+    print(f"🧠 {len(chunks)} chunk(s) armazenado(s) na coleção 'memoria_da_ia'.")
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

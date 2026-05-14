@@ -1,72 +1,90 @@
-import memoria
-import cerebro
+# conversar.py
+import chromadb
+import os
+from datetime import datetime
 import ollama
-import sys
 
+# Configuração do ChromaDB (mesmo diretório do memoria.py)
+PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
+client = chromadb.PersistentClient(path=PERSIST_DIR)
+colecao = client.get_or_create_collection(name="memoria_da_ia")
 
-def get_embedding(text):
-    try:
-        resp = ollama.embeddings(model='nomic-embed-text', prompt=text)
-        if isinstance(resp, dict) and 'embedding' in resp:
-            return resp['embedding']
-        if isinstance(resp, list) and len(resp) > 0:
-            first = resp[0]
-            if isinstance(first, dict) and 'embedding' in first:
-                return first['embedding']
-            return first
-        return resp
-    except Exception as e:
-        print(f"Erro ao gerar embedding: {e}")
-        return None
+def gerar_embedding(texto):
+    """Gera embedding usando o modelo nomic-embed-text via Ollama."""
+    response = ollama.embeddings(model='nomic-embed-text', prompt=texto)
+    return response['embedding']
 
-
-def build_context_from_results(resultado):
-    # chromadb retorna listas aninhadas em query
-    docs = resultado.get('documents', [[]])[0]
-    metas = resultado.get('metadatas', [[]])[0]
-    context_parts = []
-    for d, m in zip(docs, metas):
-        fonte = m.get('fonte', 'desconhecida')
-        tipo = m.get('tipo', '')
-        context_parts.append(f"Fonte: {fonte} | Tipo: {tipo}\n{d}")
-    return "\n\n".join(context_parts)
-
+def buscar_contexto(pergunta, top_n=3):
+    """Busca no ChromaDB os chunks mais relevantes para a pergunta."""
+    emb_pergunta = gerar_embedding(pergunta)
+    resultados = colecao.query(
+        query_embeddings=[emb_pergunta],
+        n_results=top_n,
+        include=["documents", "metadatas", "distances"]
+    )
+    return resultados
 
 def main():
     print("Digite sua pergunta (ou CTRL+C para sair):")
-    try:
-        pergunta = input("Pergunta: ")
-    except KeyboardInterrupt:
-        print()
-        sys.exit(0)
-
-    emb = get_embedding(pergunta)
-    if emb is None:
-        print("Não foi possível gerar embedding da pergunta. Abortando.")
+    pergunta = input("Pergunta: ").strip()
+    
+    if not pergunta:
+        print("❌ Nenhuma pergunta fornecida.")
         return
 
-    resultado = memoria.semantic_search(emb, top_n=3)
-    contexto = build_context_from_results(resultado)
+    # Buscar contexto relevante
+    print("\n🔍 Buscando nas memórias...")
+    resultados = buscar_contexto(pergunta)
+    
+    if resultados['documents'] and resultados['documents'][0]:
+        contexto = "\n---\n".join(resultados['documents'][0])
+        print(f"📚 Contexto recuperado ({len(resultados['documents'][0])} memórias):")
+        for doc in resultados['documents'][0]:
+            print(f"  - {doc[:100]}...")
+    else:
+        contexto = "Nenhuma memória relevante encontrada."
+        print("📭 Nenhuma memória relevante encontrada.")
 
-    prompt = (
-        "Você é uma IA com acesso às suas próprias memórias e anotações.\n"
-        "Contexto recuperado das suas memórias:\n\n"
-        f"{contexto}\n\n"
-        f"Pergunta: {pergunta}\n"
-        "Responda com base no contexto acima. Se o contexto não for relevante, responda com seu conhecimento geral."
-    )
+    # Montar prompt aumentado
+    prompt = f"""Você é uma IA com acesso às suas próprias memórias e anotações.
 
-    print('\n🤖 Perguntando ao modelo...')
-    resposta = cerebro.pensar(prompt)
-    print('\n--- RESPOSTA ---')
-    print(resposta)
-    print('----------------')
+Contexto recuperado das suas memórias:
+---
+{contexto}
+---
 
-    salvar = input('Salvar essa interação na memória? (s/n): ').strip().lower()
+Pergunta: {pergunta}
+
+Responda com base no contexto acima. Se o contexto não for relevante, responda com seu conhecimento geral."""
+
+    # Enviar para a LLM
+    print("\n🤔 Gerando resposta...")
+    try:
+        resposta = ollama.generate(model='qwen2.5:3b', prompt=prompt)
+        print("\n--- RESPOSTA ---")
+        print(resposta['response'])
+        print("-----------------")
+    except Exception as e:
+        print(f"❌ Erro ao acessar a LLM: {e}")
+        return
+
+    # Perguntar se quer salvar a interação na memória
+    salvar = input("\n💾 Salvar essa interação na memória? (s/n): ").strip().lower()
     if salvar == 's':
-        memoria.registrar_lembranca(pergunta, resposta, tipo='interacao')
-        print('Interação salva.')
+        documento = f"Pergunta: {pergunta}\nResposta: {resposta['response']}"
+        timestamp = datetime.now().isoformat()
+        emb = gerar_embedding(documento)
+        colecao.add(
+            documents=[documento],
+            embeddings=[emb],
+            metadatas=[{
+                "fonte": "interacao_usuario",
+                "tipo": "dialogo",
+                "timestamp": timestamp
+            }],
+            ids=[f"interacao_{timestamp}"]
+        )
+        print("🧠 Interação salva na memória.")
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

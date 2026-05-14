@@ -1,77 +1,117 @@
 # main.py
 import capturador
 import cerebro
-import memoria
-import time
+import chromadb
+import os
+from datetime import datetime
 import ollama
-import sys
 
-print("MINI IA - INICIANDO CONSCIÊNCIA...")
-print("="*30)
+# Configuração do ChromaDB
+PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
+client = chromadb.PersistentClient(path=PERSIST_DIR)
+colecao = client.get_or_create_collection(name="memoria_da_ia")
 
-# 1. Capturar a tela
-print("\n👁️ Observando...")
-texto_observado = capturador.capturar_e_extrair_texto()
-if texto_observado.strip():
+def gerar_embedding(texto):
+    """Gera embedding usando o modelo nomic-embed-text via Ollama."""
+    response = ollama.embeddings(model='nomic-embed-text', prompt=texto)
+    return response['embedding']
+
+def buscar_memorias_relacionadas(texto, top_n=2, threshold=0.5):
+    """Busca no ChromaDB memórias similares ao texto, com limiar de similaridade."""
+    emb = gerar_embedding(texto)
+    resultados = colecao.query(
+        query_embeddings=[emb],
+        n_results=top_n,
+        include=["documents", "metadatas", "distances"]
+    )
+    memorias = []
+    if resultados['documents'] and resultados['documents'][0]:
+        for i, doc in enumerate(resultados['documents'][0]):
+            distancia = resultados['distances'][0][i] if resultados['distances'] else 1.0
+            print(f"  (distância: {distancia:.4f})")  # debug
+            if distancia <= threshold:
+                memorias.append(doc)
+    return memorias
+
+def gerar_reflexao(pensamento_atual, memorias):
+    """Gera uma reflexão conectando o pensamento atual com memórias passadas."""
+    contexto = "\n---\n".join(memorias)
+    prompt = f"""Você é uma IA com memória e capacidade de reflexão.
+
+Suas memórias anteriores:
+---
+{contexto}
+---
+
+Observação atual:
+{pensamento_atual}
+
+Com base nas suas memórias e na observação atual, gere uma reflexão curta (1-2 frases) conectando o que você está vendo agora com o que já sabe. Não invente nada que não esteja no contexto ou na observação."""
+
+    try:
+        resposta = ollama.generate(model='qwen2.5:3b', prompt=prompt)
+        return resposta['response'].strip()
+    except Exception as e:
+        return f"(Reflexão não gerada: {e})"
+
+def registrar_na_memoria(documento, tipo, embedding=True):
+    """Armazena um documento na memória persistente."""
+    timestamp = datetime.now().isoformat()
+    dados = {
+        "documents": [documento],
+        "metadatas": [{"timestamp": timestamp, "tipo": tipo}],
+        "ids": [f"{tipo}_{timestamp}"]
+    }
+    if embedding:
+        dados["embeddings"] = [gerar_embedding(documento)]
+    colecao.add(**dados)
+
+def main():
+    print("MINI IA - CICLO DE OBSERVAÇÃO E REFLEXÃO")
+    print("=" * 40)
+
+    # 1. Capturar a tela
+    print("\n👁️ Observando...")
+    texto_observado = capturador.capturar_e_extrair_texto()
+    if not texto_observado.strip():
+        texto_observado = "Tela sem texto detectado ou majoritariamente gráfica."
     print(f"Texto observado: '{texto_observado[:100]}...'")
-else:
-    texto_observado = "Tela sem texto detectado ou majoritariamente gráfica."
-    print(texto_observado)
 
-# 2. Processar com a LLM (pensar)
-print("\n🤔 Pensando...")
-resumo_pensamento = cerebro.pensar(texto_observado)
-print(f"Pensamento: {resumo_pensamento}")
+    # 2. Processar com a LLM (pensamento)
+    print("\n🤔 Pensando...")
+    pensamento = cerebro.pensar(texto_observado)
+    print(f"Pensamento: {pensamento}")
 
-# 3. Guardar na memória
-print("\n🧠 Lembrando...")
-try:
-    # tenta gerar embedding do pensamento para buscas
-    emb_resp = ollama.embeddings(model='nomic-embed-text', prompt=resumo_pensamento)
-    # extrair formato comum
-    if isinstance(emb_resp, dict) and 'embedding' in emb_resp:
-        pensamento_embedding = emb_resp['embedding']
-    elif isinstance(emb_resp, list) and len(emb_resp) > 0:
-        pensamento_embedding = emb_resp[0].get('embedding') if isinstance(emb_resp[0], dict) else emb_resp[0]
+    # 3. Buscar memórias relacionadas
+    print("\n🔍 Buscando memórias relacionadas...")
+    memorias = buscar_memorias_relacionadas(pensamento)
+    if memorias:
+        print(f"📚 {len(memorias)} memória(s) encontrada(s).")
+        for m in memorias:
+            print(f"  - {m[:80]}...")
+        
+        # 4. Gerar reflexão conectada
+        print("\n💭 Gerando reflexão conectada...")
+        reflexao = gerar_reflexao(pensamento, memorias)
+        print(f"Reflexão: {reflexao}")
     else:
-        pensamento_embedding = None
-except Exception as e:
-    print(f"Aviso: não foi possível gerar embedding (ollama): {e}")
-    pensamento_embedding = None
+        print("📭 Nenhuma memória relevante encontrada.")
+        reflexao = None
 
-memoria.registrar_lembranca(texto_observado, resumo_pensamento, tipo='observacao_passiva', embedding=pensamento_embedding)
+    # 5. Salvar na memória
+    print("\n🧠 Salvando na memória...")
+    documento_pensamento = f"Observação: {texto_observado}\nPensamento: {pensamento}"
+    registrar_na_memoria(documento_pensamento, "observacao_passiva")
+    print("Pensamento registrado.")
 
-# Busca memórias relacionadas e gera reflexão se relevante
-try:
-    if pensamento_embedding is not None:
-        busca = memoria.semantic_search(pensamento_embedding, top_n=2)
-        docs = busca.get('documents', [[]])[0]
-        metas = busca.get('metadatas', [[]])[0]
-        distances = busca.get('distances', [[]])[0] if 'distances' in busca else []
-        relevante = False
-        if distances:
-            # assume distância é 0..1 onde menor = mais similar; converte para similaridade
-            sim = 1 - distances[0]
-            relevante = sim > 0.6
-        else:
-            relevante = len(docs) > 0
+    if reflexao:
+        documento_reflexao = f"Reflexão: {reflexao}\n(Baseado em: {pensamento})"
+        registrar_na_memoria(documento_reflexao, "reflexao")
+        print("Reflexão registrada.")
 
-        if relevante:
-            memoria_texts = []
-            for d, m in zip(docs, metas):
-                memoria_texts.append(f"[{m.get('tipo','')}] {d}")
-            memoria_compact = "\n\n".join(memoria_texts)
-            reflection_prompt = (
-                f"Com base nas minhas memórias anteriores:\n{memoria_compact}\n\n"
-                f"E no que acabei de observar:\n{resumo_pensamento}\n\n"
-                "Minha reflexão conectada é:"
-            )
-            print("\n🪞 Gerando reflexão conectada...")
-            reflexao = cerebro.pensar(reflection_prompt)
-            print(f"Reflexão: {reflexao}")
-            memoria.registrar_lembranca(resumo_pensamento, reflexao, tipo='reflexao')
-except Exception as e:
-    print(f"Aviso: erro durante reflexão conectada: {e}")
+    print("\n" + "=" * 40)
+    print("CICLO COMPLETO.")
+    print(f"Total de memórias na coleção: {colecao.count()}")
 
-print("\n" + "="*30)
-print("CICLO COMPLETO. Primeira experiência registrada.")
+if __name__ == "__main__":
+    main()
