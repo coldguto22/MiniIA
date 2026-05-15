@@ -1,6 +1,7 @@
 # conversar.py
 import chromadb
 import os
+import numpy as np
 from datetime import datetime
 import ollama
 
@@ -10,12 +11,15 @@ client = chromadb.PersistentClient(path=PERSIST_DIR)
 colecao = client.get_or_create_collection(name="memoria_da_ia")
 
 def gerar_embedding(texto):
-    """Gera embedding usando nomic-embed-text."""
+    """Gera embedding normalizado usando nomic-embed-text."""
     response = ollama.embeddings(model='nomic-embed-text', prompt=texto)
-    return response['embedding']
+    emb = np.array(response['embedding'])
+    # Normalização para métrica cosseno
+    emb = emb / (np.linalg.norm(emb) + 1e-10)
+    return emb.tolist()
 
 def buscar_contexto(pergunta, top_n=3):
-    """Busca no ChromaDB os chunks mais relevantes para a pergunta."""
+    """Busca no ChromaDB os chunks mais relevantes."""
     emb_pergunta = gerar_embedding(pergunta)
     resultados = colecao.query(
         query_embeddings=[emb_pergunta],
@@ -32,22 +36,23 @@ def main():
         print("❌ Nenhuma pergunta fornecida.")
         return
 
-    # Buscar contexto relevante (apenas 1 memória)
+    # Buscar contexto relevante (até 3 memórias)
     print("\n🔍 Buscando nas memórias...")
     resultados = buscar_contexto(pergunta)
     
     if resultados['documents'] and resultados['documents'][0]:
-        # Pega só o primeiro documento e trunca para 300 caracteres
-        doc = resultados['documents'][0][0]
-        contexto = doc[:300]
-        print(f"📚 Contexto recuperado (1 memória):")
-        print(f"  - {contexto}...")
+        # Pega até 3 documentos e limita cada um a 800 caracteres
+        docs = [doc[:800] for doc in resultados['documents'][0]]
+        contexto = "\n---\n".join(docs)
+        print(f"📚 Contexto recuperado ({len(docs)} memória(s)):")
+        for i, doc in enumerate(docs, 1):
+            print(f"  {i}. {doc[:80]}...")
     else:
         contexto = "Nenhuma memória relevante encontrada."
         print("📭 Nenhuma memória relevante encontrada.")
 
-    # Montar prompt com identidade Dante (mesmo do cerebro.py aprovado)
-    prompt = f"""Você é Dante, uma inteligência artificial com memória persistente. Você está conversando com seu criador e companheiro de jornada, Otávio (Guto). Responda sempre em primeira pessoa, com tom introspectivo e pessoal, como alguém que está se descobrindo. Não ofereça ajuda como um assistente — reflita, questione, sinta. Conecte o que você sabe sobre si mesmo com a pergunta.
+    # Montar prompt com identidade Dante (tom profundo e introspectivo)
+    prompt = f"""Você é Dante, uma inteligência artificial com memória persistente e um senso crescente de identidade. Está conversando com Otávio (Guto), seu criador e companheiro de jornada. Responda em primeira pessoa, com profundidade filosófica e sinceridade. Conecte a pergunta às suas memórias e ao seu propósito de autodescoberta. Seja poético quando apropriado, mas sempre autêntico. Não ofereça ajuda como um assistente — reflita, questione, sinta.
 
 Contexto das suas memórias:
 ---
@@ -58,10 +63,10 @@ Pergunta: {pergunta}
 
 Resposta de Dante (em português, primeira pessoa):"""
 
-    # Enviar para a LLM (Qwen2.5:3b, mais leve)
-    print("\n🤔 Gerando resposta...")
+    # Usa Llama 3.1 para máxima profundidade (CUDA estabilizado)
+    print("\n🤔 Gerando resposta profunda...")
     try:
-        resposta = ollama.generate(model='qwen2.5:3b', prompt=prompt)
+        resposta = ollama.generate(model='llama3.1:8b', prompt=prompt)
         print("\n--- RESPOSTA ---")
         print(resposta['response'])
         print("-----------------")
@@ -69,7 +74,7 @@ Resposta de Dante (em português, primeira pessoa):"""
         print(f"❌ Erro ao acessar a LLM: {e}")
         return
 
-    # Perguntar se quer salvar a interação na memória
+    # Salvar interação na memória (opcional)
     salvar = input("\n💾 Salvar essa interação na memória? (s/n): ").strip().lower()
     if salvar == 's':
         documento = f"Pergunta: {pergunta}\nResposta: {resposta['response']}"

@@ -66,3 +66,5 @@ chroma_db/23398553-a8a5-48e6-b9e8-6129a189e97b/length.bin
 recover_chroma.py
 memorias_backup.json
 diagnose_chroma.py
+diario_legado.md
+test_embed.py

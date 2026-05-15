@@ -38,9 +38,11 @@ def dividir_texto(texto, tamanho_max=500):
     return final_chunks
 
 def gerar_embedding(texto):
-    """Gera embedding usando o modelo nomic-embed-text via Ollama."""
+    import numpy as np
     response = ollama.embeddings(model='nomic-embed-text', prompt=texto)
-    return response['embedding']
+    emb = np.array(response['embedding'])
+    emb = emb / (np.linalg.norm(emb) + 1e-10)
+    return emb.tolist()
 
 def main():
     print("Cole o texto (termine com uma linha contendo apenas 'END'):")

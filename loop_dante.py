@@ -17,18 +17,25 @@ import ollama
 import subprocess
 
 # --- Configurações ---
-INTERVALO_SEGUNDOS = 90
-CYCLES_PARA_DIARIO = 10
+INTERVALO_SEGUNDOS = 60
+CYCLES_PARA_DIARIO = 5
 THRESHOLD_SIMILARIDADE = 0.7
 TOP_N_MEMORIAS = 5
-MAX_CHARS_EMBEDDING = 7000
-MODELO_OBSERVACAO = "llama3.1:8b"
+MAX_CHARS_EMBEDDING = 6000
+MODELO_OBSERVACAO = "qwen2.5:3b"
 MODELO_DIARIO = "llama3.1:8b"
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
 
 # --- Inicialização do ChromaDB ---
 PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
+
+# ⚠️ Remove a base antiga para forçar recriação com métrica cosine
+import shutil
+if os.path.exists(PERSIST_DIR):
+    shutil.rmtree(PERSIST_DIR)
+    print("Base antiga removida para recriação com métrica cosine.")
+
 client = chromadb.PersistentClient(path=PERSIST_DIR)
 colecao = client.get_or_create_collection(
     name="memoria_da_ia",
@@ -45,8 +52,12 @@ def log(mensagem):
         f.write(linha + "\n")
 
 def gerar_embedding(texto):
+    import numpy as np
     resp = ollama.embeddings(model="nomic-embed-text", prompt=texto)
-    return resp["embedding"]
+    emb = np.array(resp["embedding"])
+    # Normaliza para garantir que a distância cosseno funcione
+    emb = emb / (np.linalg.norm(emb) + 1e-10)
+    return emb.tolist()
 
 def tela_mudou(hash_anterior):
     import mss
