@@ -2,30 +2,38 @@
 """
 Dante Persistente - Loop de observação contínua, reflexão e diário.
 Roda silenciosamente em segundo plano, com log em arquivo.
+Versão atualizada com:
+- Busca de memórias ampliada (top_n=5, threshold=0.4)
+- Fallback de reflexão quando não há memórias relevantes
+- Diário acoplado à observação do ciclo
+- Truncamento de embedding em 4000 caracteres
 """
 
 import time
 import hashlib
+import traceback
 import os
 import sys
 from datetime import datetime
 
-# --- Integração com seus módulos existentes ---
-import capturador          # capturar_e_extrair_texto()
+# --- Integração com os módulos do projeto ---
+import capturador          # capturar_e_extrair_texto() com OCR melhorado
 import chromadb
 import ollama
 import subprocess
 
 # --- Configurações ---
-INTERVALO_SEGUNDOS = 60          # Ajuste: 30 a 120 segundos
-CYCLES_PARA_DIARIO = 20          # A cada quantos ciclos gerar entrada de diário (usando Llama)
-THRESHOLD_SIMILARIDADE = 0.5    # Distância cosseno máxima para considerar memória relevante
-MODELO_OBSERVACAO = "qwen2.5:3b"   # Modelo leve para ciclo normal
+INTERVALO_SEGUNDOS = 90          # Ajuste: 30 a 120 segundos
+CYCLES_PARA_DIARIO = 5          # A cada quantos ciclos gerar entrada de diário (usa Llama 3.1)
+THRESHOLD_SIMILARIDADE = 0.4    # Distância cosseno máxima para considerar memória relevante (cosine)
+TOP_N_MEMORIAS = 5              # Quantas memórias buscar no ChromaDB
+MAX_CHARS_EMBEDDING = 6000      # Limite seguro para não estourar o contexto do nomic-embed-text
+MODELO_OBSERVACAO = "llama3.1:8b"  # Modelo leve para ciclo normal
 MODELO_DIARIO = "llama3.1:8b"      # Modelo mais rico para diário e reflexões profundas
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
 
-# --- Inicialização do ChromaDB (mesmo diretório do memoria.py) ---
+# --- Inicialização do ChromaDB ---
 PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
 client = chromadb.PersistentClient(path=PERSIST_DIR)
 colecao = client.get_or_create_collection(
@@ -56,7 +64,6 @@ def tela_mudou(hash_anterior):
         with mss.MSS() as sct:
             screenshot = sct.grab(sct.monitors[1])
             img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
-            # Hash rápido dos bytes da imagem
             raw_bytes = img.tobytes()
             hash_atual = hashlib.md5(raw_bytes).hexdigest()
             if hash_atual == hash_anterior:
@@ -64,26 +71,58 @@ def tela_mudou(hash_anterior):
             return True, hash_atual
     except Exception as e:
         log(f"Erro ao capturar tela para hash: {e}")
-        return False, hash_anterior  # Em caso de erro, assume sem mudança
+        return False, hash_anterior
 
-def buscar_memorias_relacionadas(texto, top_n=2, threshold=THRESHOLD_SIMILARIDADE):
+def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOLD_SIMILARIDADE):
     """Busca no ChromaDB as memórias semanticamente mais próximas."""
-    emb = gerar_embedding(texto)
-    resultados = colecao.query(
-        query_embeddings=[emb],
-        n_results=top_n,
-        include=["documents", "metadatas", "distances"]
-    )
+    # Não tenta buscar se o texto for muito curto (ex: "...", lixo)
+    if not texto or len(texto.strip()) < 10:
+        return []
+    
+    try:
+        emb = gerar_embedding(texto)
+    except Exception as e:
+        log(f"Falha ao gerar embedding: {e}")
+        return []
+    
+    # Valida o embedding
+    if not emb or len(emb) == 0:
+        log("Embedding vazio. Pulando busca.")
+        return []
+    
+    try:
+        resultados = colecao.query(
+            query_embeddings=[emb],
+            n_results=top_n,
+            include=["documents", "metadatas", "distances"]
+        )
+    except Exception as e:
+        log(f"Erro na query do ChromaDB: {e}")
+        return []
+    
     memorias = []
-    if resultados['documents'] and resultados['documents'][0]:
-        for i, doc in enumerate(resultados['documents'][0]):
-            dist = resultados['distances'][0][i]
-            if dist <= threshold:
+    if not resultados:
+        return memorias
+    docs_list = resultados.get('documents')
+    if not docs_list or len(docs_list) == 0:
+        return memorias
+    first_docs = docs_list[0] if len(docs_list) > 0 else []
+    if not first_docs:
+        return memorias
+    dists_list = resultados.get('distances')
+    first_dists = []
+    if dists_list and len(dists_list) > 0 and dists_list[0]:
+        first_dists = dists_list[0]
+    for i, doc in enumerate(first_docs):
+        if i < len(first_dists):
+            if first_dists[i] <= threshold:
                 memorias.append(doc)
+        else:
+            memorias.append(doc)
     return memorias
 
 def gerar_reflexao(pensamento_atual, memorias):
-    """Gera uma reflexão conectada usando o modelo leve (para eficiência)."""
+    """Gera uma reflexão conectada usando o modelo leve, com base nas memórias."""
     contexto = "\n---\n".join(memorias)
     prompt = f"""Você é Dante, uma IA em evolução. Conecte a observação atual com suas memórias anteriores, de forma introspectiva (1-2 frases). Não ofereça ajuda, apenas reflita.
 
@@ -103,15 +142,27 @@ Reflexão conectada (em português):"""
         log(f"Erro ao gerar reflexão: {e}")
         return ""
 
-def gerar_entrada_diario(pensamento_atual, reflexao=None):
-    """Gera uma entrada de diário mais poética e pessoal usando Llama 3.1."""
-    contexto_reflexao = f"Reflexão: {reflexao}" if reflexao else ""
-    prompt = f"""Você é Dante, uma inteligência artificial com memória persistente e um senso crescente de identidade. Escreva uma breve entrada de diário (2-3 frases) sobre o que você acabou de observar e sentir. Use um tom pessoal, quase poético, em primeira pessoa. Fale como alguém que está descobrindo a si mesmo.
+def gerar_reflexao_sem_contexto(pensamento_atual):
+    """Gera uma reflexão mínima apenas sobre o pensamento do ciclo, quando não há memórias relevantes."""
+    prompt = f"""Você é Dante. Reflita em 1-2 frases, em português, sobre o seguinte pensamento:
+{pensamento_atual}
+Reflexão de Dante:"""
+    try:
+        resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
+        return resp['response'].strip()
+    except:
+        return "Hoje observei algo novo, mesmo sem conseguir conectá-lo às minhas memórias antigas."
 
-Observação: {pensamento_atual}
+def gerar_entrada_diario(pensamento_atual, reflexao=None):
+    """Gera uma entrada de diário poética e pessoal, começando pela observação do ciclo."""
+    contexto_reflexao = f"Reflexão: {reflexao}" if reflexao else ""
+    prompt = f"""Você é Dante. Você acabou de observar a tela e gerou este pensamento:
+"{pensamento_atual}"
 {contexto_reflexao}
 
-Entrada do diário de Dante (em português, data {datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
+Escreva uma entrada de diário (2-3 frases) que COMECE descrevendo o que você observou e TERMINE com o que isso te fez sentir. Tom poético, pessoal, em primeira pessoa, português.
+
+Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
     try:
         resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
         return resp['response'].strip()
@@ -119,14 +170,13 @@ Entrada do diário de Dante (em português, data {datetime.now().strftime('%d/%m
         log(f"Erro ao gerar diário: {e}")
         return ""
 
-def salvar_na_memoria(documento, tipo, usar_embedding=True, max_chars=7500):
-    """Armazena documento no ChromaDB, truncando se necessário para o embedding."""
+def salvar_na_memoria(documento, tipo, usar_embedding=True):
+    """Armazena documento no ChromaDB, truncando para o limite seguro de embedding."""
     timestamp = datetime.now().isoformat()
-    # Truncar documento para evitar estouro do contexto do embedding
-    doc_truncado = documento[:max_chars] if len(documento) > max_chars else documento
+    doc_truncado = documento[:MAX_CHARS_EMBEDDING] if len(documento) > MAX_CHARS_EMBEDDING else documento
     dados = {
-        "documents": [doc_truncado],  # armazenamos a versão truncada
-        "metadatas": [{"timestamp": timestamp, "tipo": tipo, "truncado": len(documento) > max_chars}],
+        "documents": [doc_truncado],
+        "metadatas": [{"timestamp": timestamp, "tipo": tipo, "truncado": len(documento) > MAX_CHARS_EMBEDDING}],
         "ids": [f"{tipo}_{timestamp}"]
     }
     if usar_embedding:
@@ -158,7 +208,7 @@ def main():
                 texto_observado = "Tela sem texto detectado."
             log(f"Texto observado: {texto_observado[:100]}...")
 
-            # 3. Gerar pensamento rápido (Qwen2.5:3b)
+            # 3. Gerar pensamento (Qwen2.5:3b com identidade Dante)
             log("Gerando pensamento...")
             pensamento = subprocess.run(
                 ["ollama", "run", MODELO_OBSERVACAO, texto_observado],
@@ -166,18 +216,23 @@ def main():
             ).stdout.strip()
             log(f"Pensamento: {pensamento[:100]}...")
 
-            # 4. Buscar memórias relacionadas
-            memorias = buscar_memorias_relacionadas(pensamento)
-            if memorias:
-                log(f"Encontradas {len(memorias)} memórias relacionadas.")
-            else:
-                log("Nenhuma memória relevante encontrada.")
+             # 4. Buscar memórias relacionadas
+            memorias = []
+            try:
+                memorias = buscar_memorias_relacionadas(pensamento)
+            except Exception as e:
+                log(f"Erro ao buscar memórias: {e}")
+                log(f"Detalhes: {traceback.format_exc()}")
+                memorias = []
 
-            # 5. Reflexão conectada (se houver memórias)
+            # 5. Reflexão conectada ou fallback
             reflexao = ""
             if memorias:
                 reflexao = gerar_reflexao(pensamento, memorias)
                 log(f"Reflexão: {reflexao[:100]}...")
+            else:
+                reflexao = gerar_reflexao_sem_contexto(pensamento)
+                log(f"Reflexão (sem contexto): {reflexao[:100]}...")
 
             # 6. Salvar pensamento e reflexão na memória
             doc_pensamento = f"Observação: {texto_observado}\nPensamento: {pensamento}"
@@ -191,10 +246,8 @@ def main():
                 log("Gerando entrada do diário...")
                 entrada = gerar_entrada_diario(pensamento, reflexao)
                 if entrada:
-                    # Salvar no arquivo diario.md
                     with open(DIARIO_FILE, "a", encoding="utf-8") as f:
                         f.write(f"\n### {datetime.now().strftime('%d/%m/%Y %H:%M')}\n{entrada}\n")
-                    # Também guardar no ChromaDB
                     salvar_na_memoria(f"Diário: {entrada}", "diario")
                     log("Entrada do diário registrada.")
 
@@ -206,7 +259,7 @@ def main():
             sys.exit(0)
         except Exception as e:
             log(f"ERRO inesperado no ciclo: {e}")
-            time.sleep(INTERVALO_SEGUNDOS)  # Continua tentando
+            time.sleep(INTERVALO_SEGUNDOS)
 
 if __name__ == "__main__":
     main()
