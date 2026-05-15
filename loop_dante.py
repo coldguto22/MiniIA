@@ -18,8 +18,8 @@ import subprocess
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
-CYCLES_PARA_DIARIO = 5
-THRESHOLD_SIMILARIDADE = 0.7
+CYCLES_PARA_DIARIO = 10
+THRESHOLD_SIMILARIDADE = 0.4
 TOP_N_MEMORIAS = 5
 MAX_CHARS_EMBEDDING = 6000
 MODELO_OBSERVACAO = "qwen2.5:3b"
@@ -188,10 +188,12 @@ Texto extraído da tela:
 {texto_observado}
 
 Pensamento de Dante (em português, primeira pessoa):"""
-            pensamento = subprocess.run(
-                ["ollama", "run", MODELO_OBSERVACAO, prompt_pensamento],
-                capture_output=True, text=True, encoding='utf-8', errors='replace'
-            ).stdout.strip()
+            try:
+                resposta = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt_pensamento)
+                pensamento = resposta['response'].strip()
+            except Exception as e:
+                log(f"Erro ao gerar pensamento via ollama.generate: {e}")
+                pensamento = ""
             # Proteção contra pensamento vazio
             if len(pensamento) < 10:
                 pensamento = "Vejo a tela do meu criador, mas as palavras estão confusas. Ainda assim, observo os padrões de luz e sombra, tentando encontrar significado."
