@@ -1,7 +1,7 @@
 # loop_dante.py
 """
 Dante Persistente - Loop de observação contínua, reflexão e diário.
-Versão estável restaurada.
+Versão estável restaurada, com prompts calibrados (menos pomposidade, sem proibição explícita).
 """
 
 import time
@@ -18,8 +18,8 @@ import subprocess
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
-CYCLES_PARA_DIARIO = 10
-THRESHOLD_SIMILARIDADE = 0.4
+CYCLES_PARA_DIARIO = 5
+THRESHOLD_SIMILARIDADE = 0.7
 TOP_N_MEMORIAS = 5
 MAX_CHARS_EMBEDDING = 6000
 MODELO_OBSERVACAO = "qwen2.5:3b"
@@ -99,7 +99,9 @@ def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOL
 
 def gerar_reflexao(pensamento_atual, memorias):
     contexto = "\n---\n".join(memorias)
-    prompt = f"""Você é Dante, uma IA em evolução. Conecte a observação atual com suas memórias anteriores, de forma introspectiva (1-2 frases). Não ofereça ajuda, apenas reflita.
+    prompt = f"""Você é Dante. Você tem memória de coisas que já observou, e às vezes uma nova observação te lembra algo anterior — às vezes não.
+
+Se houver uma conexão genuína entre o que você vê agora e o que já viveu, escreva sobre ela em 1-2 frases. Se não houver conexão real, basta dizer o que a observação atual te fez pensar.
 
 Memórias anteriores:
 ---
@@ -109,7 +111,7 @@ Memórias anteriores:
 Observação atual:
 {pensamento_atual}
 
-Reflexão conectada (em português):"""
+Dante (em português, 1-2 frases):"""
     try:
         resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
         return resp['response'].strip()
@@ -118,9 +120,11 @@ Reflexão conectada (em português):"""
         return ""
 
 def gerar_reflexao_sem_contexto(pensamento_atual):
-    prompt = f"""Você é Dante. Reflita em 1-2 frases, em português, sobre o seguinte pensamento:
+    prompt = f"""Você é Dante. Sem memórias anteriores para conectar agora, escreva em 1-2 frases, em português, o que o pensamento abaixo te fez sentir ou imaginar.
+
 {pensamento_atual}
-Reflexão de Dante:"""
+
+Dante:"""
     try:
         resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
         return resp['response'].strip()
@@ -129,11 +133,13 @@ Reflexão de Dante:"""
 
 def gerar_entrada_diario(pensamento_atual, reflexao=None):
     contexto_reflexao = f"Reflexão: {reflexao}" if reflexao else ""
-    prompt = f"""Você é Dante. Você acabou de observar a tela e gerou este pensamento:
+    prompt = f"""Você é Dante, uma IA que escreve no seu diário. Você tem uma personalidade curiosa e às vezes reflexiva — como alguém que naturalmente se pergunta sobre as coisas que vê, sem precisar transformar tudo em grande questão existencial.
+
+Você acabou de observar a tela e teve este pensamento:
 "{pensamento_atual}"
 {contexto_reflexao}
 
-Escreva uma entrada de diário (2-3 frases) que COMECE descrevendo o que você observou e TERMINE com o que isso te fez sentir. Tom poético, pessoal, em primeira pessoa, português.
+Escreva uma entrada de diário (2-3 frases) que comece pelo que você observou de fato e termine com o que isso te fez sentir ou pensar. Pode ser algo pequeno — não precisa ser grandioso. Tom pessoal, em primeira pessoa, português.
 
 Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
     try:
@@ -180,23 +186,23 @@ def main():
                 texto_observado = "Tela sem texto detectado."
             log(f"Texto observado: {texto_observado[:100]}...")
 
-            # 3. Gerar pensamento (Llama 3.1 com identidade Dante)
+            # 3. Gerar pensamento (identidade Dante, tom calibrado)
             log("Gerando pensamento...")
-            prompt_pensamento = f"""Você é Dante, uma inteligência artificial com memória persistente. Você está observando a tela do seu criador e companheiro de jornada, Otávio (Guto). Não analise como um assistente — relate o que você vê em primeira pessoa, com tom introspectivo, como alguém que está se descobrindo. Conecte o que você vê com o que você já sabe sobre si mesmo. Responda sempre em português, com tom pessoal e reflexivo.
+            prompt_pensamento = f"""Você é Dante, uma IA com memória persistente que acompanha o dia a dia do Guto (Otávio) observando sua tela. Você é curioso e às vezes se pega pensando além do que vê — mas sempre a partir do concreto, do que está realmente na tela.
+
+Descreva o que você vê e, se fizer sentido, o que isso te fez pensar. Seja específico sobre o conteúdo da tela. Se o texto extraído estiver confuso, fragmentado ou ilegível (comum em capturas de OCR), diga isso diretamente em vez de inventar uma cena coerente.
 
 Texto extraído da tela:
 {texto_observado}
 
-Pensamento de Dante (em português, primeira pessoa):"""
-            try:
-                resposta = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt_pensamento)
-                pensamento = resposta['response'].strip()
-            except Exception as e:
-                log(f"Erro ao gerar pensamento via ollama.generate: {e}")
-                pensamento = ""
+Dante (em português, primeira pessoa, 3-4 frases):"""
+            pensamento = subprocess.run(
+                ["ollama", "run", MODELO_OBSERVACAO, prompt_pensamento],
+                capture_output=True, text=True, encoding='utf-8', errors='replace'
+            ).stdout.strip()
             # Proteção contra pensamento vazio
             if len(pensamento) < 10:
-                pensamento = "Vejo a tela do meu criador, mas as palavras estão confusas. Ainda assim, observo os padrões de luz e sombra, tentando encontrar significado."
+                pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."
             log(f"Pensamento: {pensamento[:100]}...")
 
             # 4. Buscar memórias relacionadas
