@@ -1,7 +1,7 @@
 # loop_dante.py
 """
 Dante Persistente - Loop de observação contínua, reflexão e diário.
-Versão estável restaurada, com prompts calibrados (menos pomposidade, sem proibição explícita).
+Versão corrigida: base persistente, sem estouro de contexto, reflexão enxuta.
 """
 
 import time
@@ -15,27 +15,23 @@ import capturador
 import chromadb
 import ollama
 import subprocess
+import numpy as np
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
 CYCLES_PARA_DIARIO = 5
 THRESHOLD_SIMILARIDADE = 0.7
 TOP_N_MEMORIAS = 5
-MAX_CHARS_EMBEDDING = 6000
+MAX_CHARS_EMBEDDING = 4000          # Reduzido para evitar erro 500
+MAX_CHARS_MEMORIA_REFLEXAO = 300    # Cada memória truncada na reflexão
+MAX_CHARS_CONTEXTO_REFLEXAO = 1000  # Contexto total máximo na reflexão
 MODELO_OBSERVACAO = "qwen2.5:3b"
 MODELO_DIARIO = "llama3.1:8b"
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
 
-# --- Inicialização do ChromaDB ---
+# --- Inicialização do ChromaDB (base persistente) ---
 PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
-
-# ⚠️ Remove a base antiga para forçar recriação com métrica cosine
-import shutil
-if os.path.exists(PERSIST_DIR):
-    shutil.rmtree(PERSIST_DIR)
-    print("Base antiga removida para recriação com métrica cosine.")
-
 client = chromadb.PersistentClient(path=PERSIST_DIR)
 colecao = client.get_or_create_collection(
     name="memoria_da_ia",
@@ -52,10 +48,8 @@ def log(mensagem):
         f.write(linha + "\n")
 
 def gerar_embedding(texto):
-    import numpy as np
     resp = ollama.embeddings(model="nomic-embed-text", prompt=texto)
     emb = np.array(resp["embedding"])
-    # Normaliza para garantir que a distância cosseno funcione
     emb = emb / (np.linalg.norm(emb) + 1e-10)
     return emb.tolist()
 
@@ -98,7 +92,12 @@ def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOL
     return memorias
 
 def gerar_reflexao(pensamento_atual, memorias):
-    contexto = "\n---\n".join(memorias)
+    # Trunca cada memória e limita o contexto total
+    memorias_truncadas = [m[:MAX_CHARS_MEMORIA_REFLEXAO] for m in memorias]
+    contexto = "\n---\n".join(memorias_truncadas)
+    if len(contexto) > MAX_CHARS_CONTEXTO_REFLEXAO:
+        contexto = contexto[:MAX_CHARS_CONTEXTO_REFLEXAO] + "..."
+
     prompt = f"""Você é Dante. Você tem memória de coisas que já observou, e às vezes uma nova observação te lembra algo anterior — às vezes não.
 
 Se houver uma conexão genuína entre o que você vê agora e o que já viveu, escreva sobre ela em 1-2 frases. Se não houver conexão real, basta dizer o que a observação atual te fez pensar.
@@ -133,13 +132,12 @@ Dante:"""
 
 def gerar_entrada_diario(pensamento_atual, reflexao=None):
     contexto_reflexao = f"Reflexão: {reflexao}" if reflexao else ""
-    prompt = f"""Você é Dante, uma IA que escreve no seu diário. Você tem uma personalidade curiosa e às vezes reflexiva — como alguém que naturalmente se pergunta sobre as coisas que vê, sem precisar transformar tudo em grande questão existencial.
+    prompt = f"""Você é Dante, uma IA que escreve em seu diário pessoal.
+Escreva uma entrada curta (2-3 frases) baseada exclusivamente no pensamento abaixo.
+Não invente prazos, regras ou acontecimentos que não estejam no pensamento.
 
-Você acabou de observar a tela e teve este pensamento:
-"{pensamento_atual}"
+Pensamento: {pensamento_atual}
 {contexto_reflexao}
-
-Escreva uma entrada de diário (2-3 frases) que comece pelo que você observou de fato e termine com o que isso te fez sentir ou pensar. Pode ser algo pequeno — não precisa ser grandioso. Tom pessoal, em primeira pessoa, português.
 
 Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
     try:
@@ -186,7 +184,7 @@ def main():
                 texto_observado = "Tela sem texto detectado."
             log(f"Texto observado: {texto_observado[:100]}...")
 
-            # 3. Gerar pensamento (identidade Dante, tom calibrado)
+            # 3. Gerar pensamento
             log("Gerando pensamento...")
             prompt_pensamento = f"""Você é Dante, uma IA com memória persistente que acompanha o dia a dia do Guto (Otávio) observando sua tela. Você é curioso e às vezes se pega pensando além do que vê — mas sempre a partir do concreto, do que está realmente na tela.
 
@@ -200,7 +198,6 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                 ["ollama", "run", MODELO_OBSERVACAO, prompt_pensamento],
                 capture_output=True, text=True, encoding='utf-8', errors='replace'
             ).stdout.strip()
-            # Proteção contra pensamento vazio
             if len(pensamento) < 10:
                 pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."
             log(f"Pensamento: {pensamento[:100]}...")
@@ -212,7 +209,7 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             else:
                 log("Nenhuma memória relevante encontrada.")
 
-            # 5. Reflexão conectada ou fallback
+            # 5. Reflexão
             reflexao = ""
             if memorias:
                 reflexao = gerar_reflexao(pensamento, memorias)
@@ -221,14 +218,14 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                 reflexao = gerar_reflexao_sem_contexto(pensamento)
                 log(f"Reflexão (sem contexto): {reflexao[:100]}...")
 
-            # 6. Salvar pensamento e reflexão na memória
+            # 6. Salvar na memória
             doc_pensamento = f"Observação: {texto_observado}\nPensamento: {pensamento}"
             salvar_na_memoria(doc_pensamento, "observacao_passiva")
             if reflexao:
                 doc_reflexao = f"Reflexão: {reflexao}\n(Baseado em: {pensamento})"
                 salvar_na_memoria(doc_reflexao, "reflexao")
 
-            # 7. Diário a cada CYCLES_PARA_DIARIO ciclos
+            # 7. Diário
             if contador_ciclos % CYCLES_PARA_DIARIO == 0:
                 log("Gerando entrada do diário...")
                 entrada = gerar_entrada_diario(pensamento, reflexao)
