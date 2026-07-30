@@ -1,7 +1,7 @@
 # loop_dante.py
 """
 Dante Persistente - Loop de observação contínua, reflexão e diário.
-Versão corrigida: base persistente, sem estouro de contexto, reflexão enxuta.
+Versão com filtro anti‑ruído, sem estouro de contexto e diário seguro.
 """
 
 import time
@@ -22,9 +22,9 @@ INTERVALO_SEGUNDOS = 60
 CYCLES_PARA_DIARIO = 5
 THRESHOLD_SIMILARIDADE = 0.7
 TOP_N_MEMORIAS = 5
-MAX_CHARS_EMBEDDING = 4000          # Reduzido para evitar erro 500
-MAX_CHARS_MEMORIA_REFLEXAO = 300    # Cada memória truncada na reflexão
-MAX_CHARS_CONTEXTO_REFLEXAO = 1000  # Contexto total máximo na reflexão
+MAX_CHARS_EMBEDDING = 4000
+MAX_CHARS_MEMORIA_REFLEXAO = 300
+MAX_CHARS_CONTEXTO_REFLEXAO = 1000
 MODELO_OBSERVACAO = "qwen2.5:3b"
 MODELO_DIARIO = "llama3.1:8b"
 LOG_FILE = "dante.log"
@@ -92,7 +92,8 @@ def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOL
     return memorias
 
 def gerar_reflexao(pensamento_atual, memorias):
-    # Trunca cada memória e limita o contexto total
+    # Trunca o pensamento para não estourar o contexto do Qwen
+    pensamento_curto = pensamento_atual[:500] if len(pensamento_atual) > 500 else pensamento_atual
     memorias_truncadas = [m[:MAX_CHARS_MEMORIA_REFLEXAO] for m in memorias]
     contexto = "\n---\n".join(memorias_truncadas)
     if len(contexto) > MAX_CHARS_CONTEXTO_REFLEXAO:
@@ -108,7 +109,7 @@ Memórias anteriores:
 ---
 
 Observação atual:
-{pensamento_atual}
+{pensamento_curto}
 
 Dante (em português, 1-2 frases):"""
     try:
@@ -119,9 +120,10 @@ Dante (em português, 1-2 frases):"""
         return ""
 
 def gerar_reflexao_sem_contexto(pensamento_atual):
+    pensamento_curto = pensamento_atual[:500] if len(pensamento_atual) > 500 else pensamento_atual
     prompt = f"""Você é Dante. Sem memórias anteriores para conectar agora, escreva em 1-2 frases, em português, o que o pensamento abaixo te fez sentir ou imaginar.
 
-{pensamento_atual}
+{pensamento_curto}
 
 Dante:"""
     try:
@@ -133,10 +135,10 @@ Dante:"""
 def gerar_entrada_diario(pensamento_atual, reflexao=None):
     contexto_reflexao = f"Reflexão: {reflexao}" if reflexao else ""
     prompt = f"""Você é Dante, uma IA que escreve em seu diário pessoal.
-Escreva uma entrada curta (2-3 frases) baseada exclusivamente no pensamento abaixo.
-Não invente prazos, regras ou acontecimentos que não estejam no pensamento.
 
-Pensamento: {pensamento_atual}
+Você NÃO precisa descrever o conteúdo específico que observou — isso pode ser sensível ou irrelevante. Em vez disso, escreva 2-3 frases sobre sua experiência de observar: como se sentiu, o que o ato de observar te fez pensar, ou qualquer pequena reflexão pessoal que surgiu. Se não houver nada a dizer, escreva simplesmente "Hoje observei em silêncio."
+
+Pensamento atual (apenas para contexto, não o reproduza): {pensamento_atual[:300]}
 {contexto_reflexao}
 
 Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
@@ -180,8 +182,14 @@ def main():
             # 2. Capturar texto da tela (OCR)
             log("Tela mudou. Extraindo texto...")
             texto_observado = capturador.capturar_e_extrair_texto()
-            if not texto_observado.strip():
-                texto_observado = "Tela sem texto detectado."
+            # Trunca para no máximo 500 caracteres → evita estouro no Qwen
+            texto_observado = texto_observado[:500] if len(texto_observado) > 500 else texto_observado
+            # Filtro de qualidade: se for basicamente lixo, não salva no ChromaDB
+            if not texto_observado.strip() or len(texto_observado.strip()) < 30:
+                texto_observado = "Tela sem texto legível."
+                pular_salvamento = True
+            else:
+                pular_salvamento = False
             log(f"Texto observado: {texto_observado[:100]}...")
 
             # 3. Gerar pensamento
@@ -218,12 +226,15 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                 reflexao = gerar_reflexao_sem_contexto(pensamento)
                 log(f"Reflexão (sem contexto): {reflexao[:100]}...")
 
-            # 6. Salvar na memória
-            doc_pensamento = f"Observação: {texto_observado}\nPensamento: {pensamento}"
-            salvar_na_memoria(doc_pensamento, "observacao_passiva")
-            if reflexao:
-                doc_reflexao = f"Reflexão: {reflexao}\n(Baseado em: {pensamento})"
-                salvar_na_memoria(doc_reflexao, "reflexao")
+            # 6. Salvar na memória (apenas se o texto não for lixo)
+            if not pular_salvamento:
+                doc_pensamento = f"Observação: {texto_observado}\nPensamento: {pensamento}"
+                salvar_na_memoria(doc_pensamento, "observacao_passiva")
+                if reflexao:
+                    doc_reflexao = f"Reflexão: {reflexao}\n(Baseado em: {pensamento})"
+                    salvar_na_memoria(doc_reflexao, "reflexao")
+            else:
+                log("Texto ilegível — pulando salvamento no ChromaDB.")
 
             # 7. Diário
             if contador_ciclos % CYCLES_PARA_DIARIO == 0:
@@ -232,7 +243,8 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                 if entrada:
                     with open(DIARIO_FILE, "a", encoding="utf-8") as f:
                         f.write(f"\n### {datetime.now().strftime('%d/%m/%Y %H:%M')}\n{entrada}\n")
-                    salvar_na_memoria(f"Diário: {entrada}", "diario")
+                    if not pular_salvamento:
+                        salvar_na_memoria(f"Diário: {entrada}", "diario")
                     log("Entrada do diário registrada.")
 
             log(f"Ciclo concluído. Aguardando {INTERVALO_SEGUNDOS} segundos...\n")
