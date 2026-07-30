@@ -29,6 +29,10 @@ MODELO_OBSERVACAO = "qwen2.5:3b"
 MODELO_DIARIO = "llama3.1:8b"
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
+# --- Configurações da Fase 4 (Asas) ---
+PESQUISA_HABILITADA = True           # Liga/desliga a busca autônoma
+CYCLES_ENTRE_PESQUISAS = 8         # Frequência mínima (a cada N ciclos)
+ULTIMO_CICLO_PESQUISA = 0           # Controle interno (não alterar)
 
 # --- Inicialização do ChromaDB (base persistente) ---
 PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
@@ -160,6 +164,55 @@ def salvar_na_memoria(documento, tipo, usar_embedding=True):
     if usar_embedding:
         dados["embeddings"] = [gerar_embedding(doc_truncado)]
     colecao.add(**dados)
+    
+def detectar_curiosidade(pensamento):
+    """
+    Avalia se o pensamento contém uma pergunta ou curiosidade que merece pesquisa.
+    Retorna (True, query) ou (False, "").
+    """
+    # Só avalia pensamentos com conteúdo mínimo
+    if len(pensamento.strip()) < 50:
+        return False, ""
+
+    prompt = f"""Você é um detector de curiosidade. Analise o pensamento abaixo e decida se ele contém uma pergunta genuína ou uma curiosidade que poderia ser pesquisada na internet.
+
+Responda APENAS com:
+- SIM:<termo de busca> se houver algo que valha a pena pesquisar.
+- NAO se não houver curiosidade relevante.
+
+Pensamento: {pensamento[:300]}
+
+Decisão:"""
+    try:
+        resp = ollama.generate(model="qwen2.5:3b", prompt=prompt)
+        resposta = resp['response'].strip()
+        if resposta.upper().startswith("SIM:"):
+            query = resposta[4:].strip()
+            return True, query
+        return False, ""
+    except:
+        return False, ""
+
+def pesquisar_e_aprender(query):
+    """Realiza a busca e gera um aprendizado com o Llama 3.1."""
+    import asas
+    resultados = asas.pesquisar(query)
+    if not resultados:
+        return ""
+
+    contexto_busca = asas.formatar_resultados(resultados)
+    prompt = f"""Você é Dante. Você acabou de pesquisar "{query}" na internet e encontrou estas informações:
+
+{contexto_busca}
+
+Com base nisso, escreva 2-3 frases em português, em primeira pessoa, sobre o que você aprendeu. Seja curioso e reflexivo, como é seu estilo. Não invente nada além do que está nos resultados.
+
+Aprendizado de Dante:"""
+    try:
+        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
+        return resp['response'].strip()
+    except:
+        return ""
 
 # --- Loop principal ---
 def main():
@@ -218,6 +271,27 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             if len(pensamento) < 10:
                 pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."
             log(f"Pensamento: {pensamento[:100]}...")
+            
+            # 3.5. Pesquisa autônoma (Fase 4 - Asas)
+            global ULTIMO_CICLO_PESQUISA
+            if PESQUISA_HABILITADA and (contador_ciclos - ULTIMO_CICLO_PESQUISA) >= CYCLES_ENTRE_PESQUISAS:
+                curioso, query = detectar_curiosidade(pensamento)
+                if curioso and query:
+                    log(f"🔍 Curiosidade detectada! Pesquisando: '{query}'")
+                    aprendizado = pesquisar_e_aprender(query)
+                    if aprendizado:
+                        log(f"📚 Aprendizado: {aprendizado[:100]}...")
+                        # Salva o aprendizado na memória
+                        salvar_na_memoria(
+                            f"Pesquisa: {query}\nAprendizado: {aprendizado}",
+                            "pesquisa_autonoma"
+                        )
+                        # Registra no diário imediatamente
+                        with open(DIARIO_FILE, "a", encoding="utf-8") as f:
+                            f.write(f"\n### {datetime.now().strftime('%d/%m/%Y %H:%M')} (Pesquisa)\n{aprendizado}\n")
+                        ULTIMO_CICLO_PESQUISA = contador_ciclos
+                    else:
+                        log("❌ Pesquisa não retornou resultados.")
 
             # 4. Buscar memórias relacionadas
             memorias = buscar_memorias_relacionadas(pensamento)
