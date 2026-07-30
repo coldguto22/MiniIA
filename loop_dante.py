@@ -164,7 +164,8 @@ def salvar_na_memoria(documento, tipo, usar_embedding=True):
 # --- Loop principal ---
 def main():
     log(">>> Dante está acordando... Loop de observação iniciado.")
-    hash_anterior = None
+    hash_anterior = None          # hash da imagem (já existente)
+    hash_texto_anterior = None    # NOVO: hash do texto extraído
     contador_ciclos = 0
 
     while True:
@@ -172,7 +173,7 @@ def main():
             contador_ciclos += 1
             log(f"Ciclo {contador_ciclos}")
 
-            # 1. Verificar se a tela mudou
+            # 1. Verificar se a tela mudou (hash da imagem)
             mudou, hash_anterior = tela_mudou(hash_anterior)
             if not mudou:
                 log("Tela estática. Pulando ciclo.")
@@ -182,8 +183,16 @@ def main():
             # 2. Capturar texto da tela (OCR)
             log("Tela mudou. Extraindo texto...")
             texto_observado = capturador.capturar_e_extrair_texto()
-            # Trunca para no máximo 500 caracteres → evita estouro no Qwen
             texto_observado = texto_observado[:500] if len(texto_observado) > 500 else texto_observado
+
+            # NOVO: Filtro de similaridade de texto (hash MD5)
+            texto_hash = hashlib.md5(texto_observado.encode('utf-8')).hexdigest()
+            if texto_hash == hash_texto_anterior:
+                log("Texto observado idêntico ao ciclo anterior. Pulando processamento.")
+                time.sleep(INTERVALO_SEGUNDOS)
+                continue
+            hash_texto_anterior = texto_hash
+
             # Filtro de qualidade: se for basicamente lixo, não salva no ChromaDB
             if not texto_observado.strip() or len(texto_observado.strip()) < 30:
                 texto_observado = "Tela sem texto legível."
@@ -217,7 +226,7 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             else:
                 log("Nenhuma memória relevante encontrada.")
 
-            # 5. Reflexão
+            # 5. Reflexão conectada ou fallback
             reflexao = ""
             if memorias:
                 reflexao = gerar_reflexao(pensamento, memorias)
@@ -226,7 +235,7 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                 reflexao = gerar_reflexao_sem_contexto(pensamento)
                 log(f"Reflexão (sem contexto): {reflexao[:100]}...")
 
-            # 6. Salvar na memória (apenas se o texto não for lixo)
+            # 6. Salvar pensamento e reflexão na memória (apenas se o texto não for lixo)
             if not pular_salvamento:
                 doc_pensamento = f"Observação: {texto_observado}\nPensamento: {pensamento}"
                 salvar_na_memoria(doc_pensamento, "observacao_passiva")
@@ -236,7 +245,7 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             else:
                 log("Texto ilegível — pulando salvamento no ChromaDB.")
 
-            # 7. Diário
+            # 7. Diário a cada CYCLES_PARA_DIARIO ciclos
             if contador_ciclos % CYCLES_PARA_DIARIO == 0:
                 log("Gerando entrada do diário...")
                 entrada = gerar_entrada_diario(pensamento, reflexao)
