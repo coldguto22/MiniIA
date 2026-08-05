@@ -15,7 +15,6 @@ from datetime import datetime
 import capturador
 import chromadb
 import ollama
-import subprocess
 import numpy as np
 
 # --- Configurações ---
@@ -266,10 +265,12 @@ Texto extraído da tela:
 {texto_observado}
 
 Dante (em português, primeira pessoa, 3-4 frases):"""
-            pensamento = subprocess.run(
-                ["ollama", "run", MODELO_OBSERVACAO, prompt_pensamento],
-                capture_output=True, text=True, encoding='utf-8', errors='replace'
-            ).stdout.strip()
+            try:
+                resp_pensamento = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt_pensamento)
+                pensamento = resp_pensamento['response'].strip()
+            except Exception as e:
+                log(f"Erro ao gerar pensamento: {e}")
+                pensamento = ""
             if len(pensamento) < 10:
                 pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."
             log(f"Pensamento: {pensamento[:100]}...")
