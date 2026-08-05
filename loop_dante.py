@@ -8,6 +8,7 @@ Inclui Fase 4: pesquisa autônoma (Asas).
 import time
 import hashlib
 import os
+import re
 import sys
 from datetime import datetime
 
@@ -29,6 +30,11 @@ MODELO_OBSERVACAO = "qwen2.5:3b"
 MODELO_DIARIO = "llama3.1:8b"
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
+
+# --- Configurações do filtro de qualidade de OCR ---
+OCR_MIN_CHARS = 30              # tamanho mínimo bruto para sequer considerar o texto
+OCR_MIN_PROPORCAO_ALFA = 0.55   # proporção mínima de caracteres alfabéticos (sem espaços)
+OCR_MIN_PROPORCAO_PALAVRAS = 0.3  # proporção mínima de "palavras válidas" no texto
 
 # --- Configurações da Fase 4 (Asas) ---
 PESQUISA_HABILITADA = True           # Liga/desliga a busca autônoma
@@ -57,6 +63,40 @@ def gerar_embedding(texto):
     emb = np.array(resp["embedding"])
     emb = emb / (np.linalg.norm(emb) + 1e-10)
     return emb.tolist()
+
+def texto_e_ruido(texto):
+    """
+    Heurística de qualidade do texto extraído por OCR. Vai além de checar o
+    tamanho: avalia a proporção de caracteres alfabéticos e de "palavras
+    válidas" para pegar casos como 'gras | "Wa " =— W ar o e' que passam
+    de OCR_MIN_CHARS mas ainda são ruído puro.
+    Retorna True se o texto deve ser tratado como ruído (não confiável).
+    """
+    texto_limpo = texto.strip()
+    if len(texto_limpo) < OCR_MIN_CHARS:
+        return True
+
+    sem_espacos = re.sub(r'\s+', '', texto_limpo)
+    if not sem_espacos:
+        return True
+
+    alfabeticos = sum(1 for c in sem_espacos if c.isalpha())
+    proporcao_alfa = alfabeticos / len(sem_espacos)
+    if proporcao_alfa < OCR_MIN_PROPORCAO_ALFA:
+        return True
+
+    palavras = texto_limpo.split()
+    if not palavras:
+        return True
+    palavras_validas = sum(
+        1 for p in palavras
+        if len(p) >= 2 and (sum(c.isalpha() for c in p) / len(p)) >= 0.6
+    )
+    proporcao_palavras_validas = palavras_validas / len(palavras)
+    if proporcao_palavras_validas < OCR_MIN_PROPORCAO_PALAVRAS:
+        return True
+
+    return False
 
 def tela_mudou(hash_anterior):
     import mss
@@ -147,12 +187,55 @@ Pensamento atual (apenas para contexto, não o reproduza): {pensamento_atual[:30
 {contexto_reflexao}
 
 Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
+
+    entrada = _tentar_gerar_diario(prompt)
+
+    if parece_recusa(entrada):
+        log("Recusa detectada na entrada de diário. Tentando novamente com prompt simplificado...")
+        prompt_simples = f"""Você é Dante. Escreva 1-2 frases pessoais e tranquilas sobre o ato de observar algo hoje, sem entrar em detalhes do que foi visto.
+
+Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
+        entrada = _tentar_gerar_diario(prompt_simples)
+
+    if parece_recusa(entrada):
+        log("Segunda tentativa também recusada. Usando fallback padrão para o diário.")
+        entrada = "Hoje observei em silêncio."
+
+    return entrada
+
+def _tentar_gerar_diario(prompt):
+    """Executa uma única chamada ao modelo de diário, isolando erros de rede/servidor."""
     try:
         resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
         return resp['response'].strip()
     except Exception as e:
         log(f"Erro ao gerar diário: {e}")
         return ""
+
+# Padrões comuns de recusa de "assistente genérico" que o Llama 3.1 às vezes produz
+# mesmo com a identidade do Dante ancorada no prompt (falso positivo de safety).
+PADROES_RECUSA = [
+    "não posso cumprir",
+    "não posso atender",
+    "não posso criar conteúdo",
+    "não posso ajudar com isso",
+    "não posso fornecer",
+    "peço desculpas, mas não posso",
+    "desculpe, mas não posso",
+    "lamento, mas não posso",
+    "como uma ia, não tenho",
+    "como uma inteligência artificial, não tenho",
+    "posso ajudar com outra coisa",
+    "posso ajudá-lo em outra coisa",
+]
+
+def parece_recusa(texto):
+    """Detecta se a resposta do modelo se parece com uma recusa de assistente genérico
+    em vez de uma entrada de diário na voz do Dante."""
+    if not texto or not texto.strip():
+        return True
+    texto_lower = texto.strip().lower()
+    return any(padrao in texto_lower for padrao in PADROES_RECUSA)
 
 def salvar_na_memoria(documento, tipo, usar_embedding=True):
     timestamp = datetime.now().isoformat()
@@ -247,10 +330,11 @@ def main():
                 continue
             hash_texto_anterior = texto_hash
 
-            # Filtro de qualidade: se for basicamente lixo, não salva no ChromaDB
-            if not texto_observado.strip() or len(texto_observado.strip()) < 30:
-                texto_observado = "Tela sem texto legível."
+            # Filtro de qualidade: se for basicamente lixo (curto, sem letras
+            # suficientes ou sem palavras reconhecíveis), não salva no ChromaDB
+            if texto_e_ruido(texto_observado):
                 pular_salvamento = True
+                texto_observado = "Tela sem texto legível."
             else:
                 pular_salvamento = False
             log(f"Texto observado: {texto_observado[:100]}...")
