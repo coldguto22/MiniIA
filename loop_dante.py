@@ -2,6 +2,7 @@
 """
 Dante Persistente - Loop de observação contínua, reflexão e diário.
 Versão com filtro anti‑ruído, sem estouro de contexto e diário seguro.
+Inclui Fase 4: pesquisa autônoma (Asas).
 """
 
 import time
@@ -29,9 +30,10 @@ MODELO_OBSERVACAO = "qwen2.5:3b"
 MODELO_DIARIO = "llama3.1:8b"
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
+
 # --- Configurações da Fase 4 (Asas) ---
 PESQUISA_HABILITADA = True           # Liga/desliga a busca autônoma
-CYCLES_ENTRE_PESQUISAS = 8         # Frequência mínima (a cada N ciclos)
+CYCLES_ENTRE_PESQUISAS = 8          # Frequência mínima (a cada N ciclos)
 ULTIMO_CICLO_PESQUISA = 0           # Controle interno (não alterar)
 
 # --- Inicialização do ChromaDB (base persistente) ---
@@ -164,14 +166,14 @@ def salvar_na_memoria(documento, tipo, usar_embedding=True):
     if usar_embedding:
         dados["embeddings"] = [gerar_embedding(doc_truncado)]
     colecao.add(**dados)
-    
+
 def detectar_curiosidade(pensamento):
     """
     Avalia se o pensamento contém uma pergunta ou curiosidade que merece pesquisa.
     Retorna (True, query) ou (False, "").
     """
-    # Só avalia pensamentos com conteúdo mínimo
-    if len(pensamento.strip()) < 50:
+    # Só avalia pensamentos com conteúdo mínimo (reduzido para 30 caracteres)
+    if len(pensamento.strip()) < 30:
         return False, ""
 
     prompt = f"""Você é um detector de curiosidade. Analise o pensamento abaixo e decida se ele contém uma pergunta genuína ou uma curiosidade que poderia ser pesquisada na internet.
@@ -271,10 +273,11 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             if len(pensamento) < 10:
                 pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."
             log(f"Pensamento: {pensamento[:100]}...")
-            
+
             # 3.5. Pesquisa autônoma (Fase 4 - Asas)
             global ULTIMO_CICLO_PESQUISA
             if PESQUISA_HABILITADA and (contador_ciclos - ULTIMO_CICLO_PESQUISA) >= CYCLES_ENTRE_PESQUISAS:
+                log("🔎 Verificando curiosidade...")
                 curioso, query = detectar_curiosidade(pensamento)
                 if curioso and query:
                     log(f"🔍 Curiosidade detectada! Pesquisando: '{query}'")
@@ -292,6 +295,9 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                         ULTIMO_CICLO_PESQUISA = contador_ciclos
                     else:
                         log("❌ Pesquisa não retornou resultados.")
+                else:
+                    log("Nenhuma curiosidade detectada neste ciclo.")
+                    ULTIMO_CICLO_PESQUISA = contador_ciclos  # mesmo assim, atualiza para não tentar de novo antes do próximo intervalo
 
             # 4. Buscar memórias relacionadas
             memorias = buscar_memorias_relacionadas(pensamento)
