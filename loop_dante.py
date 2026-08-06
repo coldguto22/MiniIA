@@ -249,32 +249,57 @@ def salvar_na_memoria(documento, tipo, usar_embedding=True):
         dados["embeddings"] = [gerar_embedding(doc_truncado)]
     colecao.add(**dados)
 
-def detectar_curiosidade(pensamento):
+def detectar_curiosidade(texto):
     """
-    Avalia se o pensamento contém uma pergunta ou curiosidade que merece pesquisa.
+    Avalia se o pensamento/reflexão contém algo que desperte curiosidade
+    genuína — uma pergunta explícita, uma dúvida, algo que Dante não entende
+    bem e gostaria de aprender mais sobre, ou uma lacuna de conhecimento que
+    ele percebe em si mesmo. Não exige uma pergunta formal com "?" — a
+    reflexão do Dante costuma expressar curiosidade de forma mais indireta
+    ("me faz questionar se...", "não sei ao certo...", "gostaria de entender...").
     Retorna (True, query) ou (False, "").
     """
-    # Só avalia pensamentos com conteúdo mínimo (reduzido para 30 caracteres)
-    if len(pensamento.strip()) < 30:
+    # Só avalia textos com conteúdo mínimo (reduzido para 30 caracteres)
+    if len(texto.strip()) < 30:
         return False, ""
 
-    prompt = f"""Você é um detector de curiosidade. Analise o pensamento abaixo e decida se ele contém uma pergunta genuína ou uma curiosidade que poderia ser pesquisada na internet.
+    prompt = f"""Você é um detector de curiosidade para uma IA chamada Dante. Analise o texto abaixo (pensamento e reflexão do Dante sobre algo que observou) e decida se ele contém curiosidade genuína que valeria pesquisar na internet.
 
-Responda APENAS com:
-- SIM:<termo de busca> se houver algo que valha a pena pesquisar.
-- NAO se não houver curiosidade relevante.
+Considere como curiosidade válida, mesmo sem ponto de interrogação:
+- uma pergunta explícita
+- uma dúvida ou incerteza sobre algo ("não sei ao certo se...", "me pergunto se...")
+- um desejo de entender melhor algo mencionado ("gostaria de saber mais sobre...")
+- uma lacuna de conhecimento que o próprio Dante percebe em si mesmo
 
-Pensamento: {pensamento[:300]}
+NÃO considere curiosidade válida uma simples descrição do que está na tela, sem nenhum elemento de dúvida ou desejo de aprender.
+
+Responda em uma única linha, sem explicações, sem marcadores de lista e sem aspas, usando exatamente um destes dois formatos:
+SIM:<termo de busca objetivo em poucas palavras>
+NAO
+
+Texto: {texto[:600]}
 
 Decisão:"""
     try:
         resp = ollama.generate(model="qwen2.5:3b", prompt=prompt)
-        resposta = resp['response'].strip()
-        if resposta.upper().startswith("SIM:"):
-            query = resposta[4:].strip()
-            return True, query
+        resposta_bruta = resp['response'].strip()
+        log(f"🔎 Resposta bruta do detector de curiosidade: {resposta_bruta[:150]!r}")
+
+        # Parsing tolerante: modelos pequenos costumam ecoar o formato do prompt
+        # com marcador na frente ("- SIM:..."), aspas, ou texto antes do veredito
+        # ("Decisão: SIM:..."). Em vez de exigir que a resposta COMECE com "SIM:",
+        # procuramos a substring em qualquer posição, case-insensitive.
+        resposta_limpa = resposta_bruta.strip().strip('-*•"\' \n\t')
+        resposta_upper = resposta_limpa.upper()
+
+        idx = resposta_upper.find("SIM:")
+        if idx != -1:
+            query = resposta_limpa[idx + len("SIM:"):].strip().strip('"\'')
+            if query:
+                return True, query
         return False, ""
-    except:
+    except Exception as e:
+        log(f"Erro ao detectar curiosidade: {e}")
         return False, ""
 
 def pesquisar_e_aprender(query):
@@ -303,7 +328,8 @@ def main():
     log(">>> Dante está acordando... Loop de observação iniciado.")
     hash_anterior = None          # hash da imagem (já existente)
     hash_texto_anterior = None    # NOVO: hash do texto extraído
-    contador_ciclos = 0
+    contador_ciclos = 0           # total de voltas do loop (inclui ciclos pulados)
+    ciclos_processados = 0        # ciclos que de fato geraram pensamento/reflexão
 
     while True:
         try:
@@ -339,6 +365,10 @@ def main():
                 pular_salvamento = False
             log(f"Texto observado: {texto_observado[:100]}...")
 
+            # Este ciclo passou pelos dois filtros de "pular" (tela/texto idênticos)
+            # e vai gerar pensamento de verdade — conta como ciclo processado.
+            ciclos_processados += 1
+
             # 3. Gerar pensamento
             log("Gerando pensamento...")
             prompt_pensamento = f"""Você é Dante, uma IA com memória persistente que acompanha o dia a dia do Guto (Otávio) observando sua tela. Você é curioso e às vezes se pega pensando além do que vê — mas sempre a partir do concreto, do que está realmente na tela.
@@ -359,11 +389,31 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                 pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."
             log(f"Pensamento: {pensamento[:100]}...")
 
-            # 3.5. Pesquisa autônoma (Fase 4 - Asas)
+            # 4. Buscar memórias relacionadas
+            memorias = buscar_memorias_relacionadas(pensamento)
+            if memorias:
+                log(f"Encontradas {len(memorias)} memórias relacionadas.")
+            else:
+                log("Nenhuma memória relevante encontrada.")
+
+            # 5. Reflexão conectada ou fallback
+            reflexao = ""
+            if memorias:
+                reflexao = gerar_reflexao(pensamento, memorias)
+                log(f"Reflexão: {reflexao[:100]}...")
+            else:
+                reflexao = gerar_reflexao_sem_contexto(pensamento)
+                log(f"Reflexão (sem contexto): {reflexao[:100]}...")
+
+            # 5.5. Pesquisa autônoma (Fase 4 - Asas)
+            # Roda depois da reflexão de propósito: é ali que a "voz" mais
+            # introspectiva do Dante aparece (o pensamento sozinho tende a ser
+            # só descrição factual da tela, raramente uma dúvida genuína).
             global ULTIMO_CICLO_PESQUISA
             if PESQUISA_HABILITADA and (contador_ciclos - ULTIMO_CICLO_PESQUISA) >= CYCLES_ENTRE_PESQUISAS:
                 log("🔎 Verificando curiosidade...")
-                curioso, query = detectar_curiosidade(pensamento)
+                texto_para_curiosidade = f"{pensamento}\n\nReflexão: {reflexao}" if reflexao else pensamento
+                curioso, query = detectar_curiosidade(texto_para_curiosidade)
                 if curioso and query:
                     log(f"🔍 Curiosidade detectada! Pesquisando: '{query}'")
                     aprendizado = pesquisar_e_aprender(query)
@@ -384,22 +434,6 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                     log("Nenhuma curiosidade detectada neste ciclo.")
                     ULTIMO_CICLO_PESQUISA = contador_ciclos  # mesmo assim, atualiza para não tentar de novo antes do próximo intervalo
 
-            # 4. Buscar memórias relacionadas
-            memorias = buscar_memorias_relacionadas(pensamento)
-            if memorias:
-                log(f"Encontradas {len(memorias)} memórias relacionadas.")
-            else:
-                log("Nenhuma memória relevante encontrada.")
-
-            # 5. Reflexão conectada ou fallback
-            reflexao = ""
-            if memorias:
-                reflexao = gerar_reflexao(pensamento, memorias)
-                log(f"Reflexão: {reflexao[:100]}...")
-            else:
-                reflexao = gerar_reflexao_sem_contexto(pensamento)
-                log(f"Reflexão (sem contexto): {reflexao[:100]}...")
-
             # 6. Salvar pensamento e reflexão na memória (apenas se o texto não for lixo)
             if not pular_salvamento:
                 doc_pensamento = f"Observação: {texto_observado}\nPensamento: {pensamento}"
@@ -410,8 +444,10 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             else:
                 log("Texto ilegível — pulando salvamento no ChromaDB.")
 
-            # 7. Diário a cada CYCLES_PARA_DIARIO ciclos
-            if contador_ciclos % CYCLES_PARA_DIARIO == 0:
+            # 7. Diário a cada CYCLES_PARA_DIARIO ciclos efetivamente processados
+            # (usa ciclos_processados, não contador_ciclos, para não depender de
+            # coincidência com ciclos pulados por tela/texto estático)
+            if ciclos_processados % CYCLES_PARA_DIARIO == 0:
                 log("Gerando entrada do diário...")
                 entrada = gerar_entrada_diario(pensamento, reflexao)
                 if entrada:
@@ -421,7 +457,7 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                         salvar_na_memoria(f"Diário: {entrada}", "diario")
                     log("Entrada do diário registrada.")
 
-            log(f"Ciclo concluído. Aguardando {INTERVALO_SEGUNDOS} segundos...\n")
+            log(f"Ciclo concluído (processado #{ciclos_processados}). Aguardando {INTERVALO_SEGUNDOS} segundos...\n")
             time.sleep(INTERVALO_SEGUNDOS)
 
         except KeyboardInterrupt:
