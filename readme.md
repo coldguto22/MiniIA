@@ -79,6 +79,56 @@ Com o ambiente virtual ativado, execute o script desejado diretamente:
 - `asas.py` — módulo de pesquisa autônoma (DuckDuckGo/`ddgs`), usado internamente pelo `loop_dante.py`. Pode ser importado isoladamente para testar buscas.
 - `test_persist.py` / `test_read.py` — scripts de teste para verificar a persistência do ChromaDB.
 
+## Testes automatizados (Fase 4.2)
+
+O projeto agora usa **pytest** com separação entre testes unitários e de integração, sem gravar dados no banco real do projeto (`chroma_db/`).
+
+- `tests/unit/` — lógica pura e comportamentos com dependências mockadas.
+- `tests/integration/` — persistência em Chroma com diretório temporário por teste.
+- marker `ollama` — testes que dependem do Ollama local.
+
+### Executar localmente
+
+1. Instale dependências:
+  ```
+  pip install -r requirements.txt
+  ```
+2. Rode testes unitários:
+  ```
+  pytest -m "unit"
+  ```
+3. Rode integração sem Ollama:
+  ```
+  pytest -m "integration and not ollama"
+  ```
+4. Rode tudo que não depende de Ollama:
+  ```
+  pytest -m "not ollama"
+  ```
+
+### Testes com Ollama (opcional)
+
+Por padrão, os testes marcados com `ollama` são pulados. Para habilitar:
+
+```
+set RUN_OLLAMA_TESTS=1
+pytest -m "ollama"
+```
+
+No PowerShell:
+
+```
+$env:RUN_OLLAMA_TESTS="1"
+pytest -m "ollama"
+```
+
+### CI no GitHub
+
+O workflow em `.github/workflows/tests.yml` roda em `push` e `pull_request`:
+
+- Job obrigatório: `pytest -m "not ollama"`
+- Job opcional (manual): testes `ollama` quando habilitados por input/variável
+
 ## Observações importantes
 
 - A base do ChromaDB (`chroma_db/`) **é persistente entre execuções** do `loop_dante.py` — a memória acumulada não é apagada ao reiniciar.

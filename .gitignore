@@ -57,8 +57,6 @@ htmlcov/
 
 # Amostras de entrada
 sample_alimentar_input.txt
-test_persist.py
-test_read.py
 __pycache__/capturador.cpython-313.pyc
 chroma_db/chroma.sqlite3
 chroma_db/23398553-a8a5-48e6-b9e8-6129a189e97b/data_level0.bin
@@ -67,10 +65,7 @@ recover_chroma.py
 memorias_backup.json
 diagnose_chroma.py
 diario_legado.md
-test_embed.py
 MiniIA.code-workspace
 backup.py
-.gitignore
-.gitignore
 backup_pre_limpeza.json
 limpar_memoria.py

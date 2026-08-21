@@ -6,3 +6,4 @@ pytesseract
 ollama
 numpy
 ddgs
+pytest

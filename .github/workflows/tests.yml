@@ -1,0 +1,60 @@
+name: Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      run_ollama:
+        description: "Run tests marked with ollama"
+        type: boolean
+        required: false
+        default: false
+
+jobs:
+  tests:
+    name: Unit + Integration (no Ollama)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run pytest (excluding ollama)
+        run: pytest -m "not ollama"
+
+  ollama-tests:
+    name: Optional Ollama Integration
+    if: github.event_name == 'workflow_dispatch' && inputs.run_ollama == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run ollama-marked tests
+        env:
+          RUN_OLLAMA_TESTS: "1"
+        run: pytest -m "ollama"
