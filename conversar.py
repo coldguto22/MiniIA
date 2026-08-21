@@ -13,6 +13,11 @@ colecao = client.get_or_create_collection(name="memoria_da_ia")
 # Histórico da conversa atual (mantido em RAM durante a sessão)
 historico = []
 
+# Parâmetros para recuperação de memórias (espelhando os do loop)
+TOP_N = 5
+THRESHOLD = 0.7  # distância cosseno máxima para considerar uma memória relevante
+
+
 def gerar_embedding(texto):
     """Gera embedding normalizado usando nomic-embed-text."""
     response = ollama.embeddings(model='nomic-embed-text', prompt=texto)
@@ -21,15 +26,36 @@ def gerar_embedding(texto):
     emb = emb / (np.linalg.norm(emb) + 1e-10)
     return emb.tolist()
 
-def buscar_contexto(pergunta, top_n=3):
-    """Busca no ChromaDB os chunks mais relevantes."""
+
+def buscar_contexto(pergunta, top_n=TOP_N, threshold=THRESHOLD):
+    """
+    Busca no ChromaDB os chunks mais relevantes e filtra por similaridade.
+    Retorna apenas os documentos com distância <= threshold.
+    """
     emb_pergunta = gerar_embedding(pergunta)
     resultados = colecao.query(
         query_embeddings=[emb_pergunta],
         n_results=top_n,
         include=["documents", "metadatas", "distances"]
     )
-    return resultados
+
+    memorias = []
+    if resultados and resultados.get('documents') and resultados['documents'][0]:
+        docs = resultados['documents'][0]
+        dists = resultados.get('distances', [[]])
+        dists = dists[0] if dists and len(dists) > 0 else []
+
+        for i, doc in enumerate(docs):
+            # Se tem distância e ela está dentro do limite, ou se não tem distância (fallback)
+            if i < len(dists):
+                if dists[i] <= threshold:
+                    memorias.append(doc)
+            else:
+                # Se por algum motivo a distância não veio, mantém o documento
+                memorias.append(doc)
+
+    return memorias
+
 
 def main():
     global historico
@@ -46,14 +72,15 @@ def main():
         if not pergunta:
             continue
 
-        # Buscar contexto relevante (até 3 memórias)
+        # Buscar contexto relevante (até 5 memórias, com filtro de similaridade)
         print("🔍 Buscando nas memórias...")
-        resultados = buscar_contexto(pergunta)
+        memorias = buscar_contexto(pergunta)
 
-        if resultados['documents'] and resultados['documents'][0]:
-            docs = [doc[:800] for doc in resultados['documents'][0]]
+        if memorias:
+            # Trunca cada memória para 800 caracteres
+            docs = [doc[:800] for doc in memorias]
             contexto = "\n---\n".join(docs)
-            print(f"📚 {len(docs)} memória(s) recuperada(s).")
+            print(f"📚 {len(docs)} memória(s) recuperada(s) com similaridade >= {THRESHOLD}.")
         else:
             contexto = "Nenhuma memória relevante encontrada."
             print("📭 Nenhuma memória encontrada.")
@@ -129,6 +156,7 @@ def main():
 
     # Fim da sessão
     print("\nAté logo, Guto. Dante encerrando sessão de chat.")
+
 
 if __name__ == "__main__":
     main()
