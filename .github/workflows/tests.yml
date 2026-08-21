@@ -33,7 +33,7 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run pytest (excluding ollama)
-        run: pytest -m "not ollama"
+        run: python -m pytest -m "not ollama"
 
   ollama-tests:
     name: Optional Ollama Integration
@@ -57,4 +57,4 @@ jobs:
       - name: Run ollama-marked tests
         env:
           RUN_OLLAMA_TESTS: "1"
-        run: pytest -m "ollama"
+        run: python -m pytest -m "ollama"
