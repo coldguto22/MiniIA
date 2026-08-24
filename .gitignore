@@ -57,6 +57,9 @@ htmlcov/
 
 # Amostras de entrada
 sample_alimentar_input.txt
+
+# README anterior
+readme.old
 __pycache__/capturador.cpython-313.pyc
 chroma_db/chroma.sqlite3
 chroma_db/23398553-a8a5-48e6-b9e8-6129a189e97b/data_level0.bin

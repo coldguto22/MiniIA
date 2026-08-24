@@ -79,9 +79,9 @@ Com o ambiente virtual ativado, execute o script desejado diretamente:
 - `asas.py` — módulo de pesquisa autônoma (DuckDuckGo/`ddgs`), usado internamente pelo `loop_dante.py`. Pode ser importado isoladamente para testar buscas.
 - `test_persist.py` / `test_read.py` — scripts de teste para verificar a persistência do ChromaDB.
 
-## Testes automatizados (Fase 4.2)
+## Testes automatizados
 
-O projeto agora usa **pytest** com separação entre testes unitários e de integração, sem gravar dados no banco real do projeto (`chroma_db/`).
+O projeto agora usa pytest com separação entre testes unitários e de integração, sem gravar dados no banco real do projeto (`chroma_db/`).
 
 - `tests/unit/` — lógica pura e comportamentos com dependências mockadas.
 - `tests/integration/` — persistência em Chroma com diretório temporário por teste.
@@ -108,7 +108,7 @@ O projeto agora usa **pytest** com separação entre testes unitários e de inte
 
 ### Testes com Ollama (opcional)
 
-Por padrão, os testes marcados com `ollama` são pulados. Para habilitar:
+Por padrão, os testes marcados com ollama são pulados. Para habilitar:
 
 ```
 set RUN_OLLAMA_TESTS=1
@@ -131,8 +131,8 @@ O workflow em `.github/workflows/tests.yml` roda em `push` e `pull_request`:
 
 ## Observações importantes
 
-- A base do ChromaDB (`chroma_db/`) **é persistente entre execuções** do `loop_dante.py` — a memória acumulada não é apagada ao reiniciar.
+- A base do ChromaDB (`chroma_db/`) é persistente entre execuções do `loop_dante.py` — a memória acumulada não é apagada ao reiniciar.
 - `dante.log` e `diario.md` são ignorados pelo Git (dados pessoais/experimentais do Guto), mas são gerados localmente a cada execução.
 - O diário (`diario.md`) tende a ser o output de maior qualidade introspectiva do sistema, gerado pelo Llama 3.1:8b a cada 5 ciclos do loop. O prompt evita pedir que Dante reproduza o conteúdo observado diretamente, para reduzir recusas do modelo em telas com conteúdo sensível ou ambíguo.
 - Textos extraídos por OCR com menos de 30 caracteres são tratados como ruído: o ciclo ainda gera pensamento/reflexão, mas nada é salvo na memória persistente.
-- A pesquisa autônoma (Asas) roda no máximo a cada `CYCLES_ENTRE_PESQUISAS` ciclos (padrão: 8) e só dispara quando o detector de curiosidade (Qwen2.5:3b) identifica uma pergunta genuína no pensamento atual.
+- A pesquisa autônoma (Asas) roda no máximo a cada `CYCLES_ENTRE_PESQUISAS` ciclos (padrão: 8) e só dispara quando o detector de curiosidade (Qwen2.5:3b) identifica uma pergunta genuína no pensamento atual.# Dante (MiniIA)
