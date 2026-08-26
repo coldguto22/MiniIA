@@ -1,4 +1,4 @@
-from scripts.ver_memorias import main
+from scripts.backup import main
 
 
 if __name__ == "__main__":
