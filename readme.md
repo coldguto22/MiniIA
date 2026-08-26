@@ -79,6 +79,22 @@ Com o ambiente virtual ativado, execute o script desejado diretamente:
 - `asas.py` — módulo de pesquisa autônoma (DuckDuckGo/`ddgs`), usado internamente pelo `loop_dante.py`. Pode ser importado isoladamente para testar buscas.
 - `test_persist.py` / `test_read.py` — scripts de teste para verificar a persistência do ChromaDB.
 
+### Estrutura de scripts (Fase 2.1)
+
+Os scripts operacionais e manuais foram centralizados na pasta `scripts/` para reduzir acoplamento na raiz:
+
+- `scripts/alimentar_memoria.py`
+- `scripts/ver_memorias.py`
+- `scripts/backup.py`
+- `scripts/limpar_memoria.py`
+- `scripts/recover_chroma.py`
+- `scripts/diagnose_chroma.py`
+- `scripts/manual/test_embed.py`
+- `scripts/manual/test_persist.py`
+- `scripts/manual/test_read.py`
+
+Os arquivos da raiz com os mesmos nomes continuam existindo como wrappers de compatibilidade.
+
 ## Testes automatizados
 
 O projeto agora usa pytest com separação entre testes unitários e de integração, sem gravar dados no banco real do projeto (`chroma_db/`).
@@ -128,6 +144,29 @@ O workflow em `.github/workflows/tests.yml` roda em `push` e `pull_request`:
 
 - Job obrigatório: `pytest -m "not ollama"`
 - Job opcional (manual): testes `ollama` quando habilitados por input/variável
+
+## Colaboração e histórico limpo
+
+Para manter a árvore de commits legível no GitHub:
+
+1. Crie uma branch curta por objetivo (`feature/*`, `fix/*`, `refactor/*`, `chore/*`).
+2. Faça commits com intenção única e mensagens específicas (`tipo(escopo): descrição`).
+3. Prefira PRs pequenas e coesas.
+4. Use **squash merge** como padrão para manter histórico linear.
+
+Há um guia completo em `CONTRIBUTING.md` e um template padrão em `.github/pull_request_template.md`.
+
+## Privacidade e dados locais
+
+Este projeto pode registrar dados sensíveis do contexto local (OCR, diário, memória vetorial e logs). Por isso, os seguintes artefatos devem permanecer fora do versionamento:
+
+- `chroma_db/`
+- `diario.md` e `diario_legado.md`
+- `dante.log` e `dante_legado.log`
+- backups locais em JSON
+- arquivos `.env` reais
+
+Quando necessário, publique apenas modelos sem segredo, como `.env.example`.
 
 ## Observações importantes
 
