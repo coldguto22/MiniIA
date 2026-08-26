@@ -1,25 +1,20 @@
-# Arquivos de log e diário (experiências da IA)
-dante.log
-diario.md
-
-# Persistência do ChromaDB
-chroma_db/
-
-# Ambiente virtual Python
-.venv/
-venv/
-ENV/
-env/
-
-# Arquivos compilados Python
+# Python runtime and cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Build and packaging
 build/
-develop-eggs/
 dist/
+develop-eggs/
 downloads/
 eggs/
 .eggs/
@@ -33,42 +28,50 @@ wheels/
 .installed.cfg
 *.egg
 
-# IDE
+# Test and typing caches
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.tox/
+.nox/
+
+# IDE and OS
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS
 .DS_Store
 Thumbs.db
 
-# Testes e cache
-.pytest_cache/
-.coverage
-htmlcov/
+# Secrets and local env files
+.env
+.env.*
+*.env
+!.env.example
 
-# Arquivos temporários
+# Runtime logs and temporary files
+*.log
+logs/
 *.tmp
 *.bak
-*.log
 *.json~
 
-# Amostras de entrada
-sample_alimentar_input.txt
-
-# README anterior
-readme.old
-__pycache__/capturador.cpython-313.pyc
-chroma_db/chroma.sqlite3
-chroma_db/23398553-a8a5-48e6-b9e8-6129a189e97b/data_level0.bin
-chroma_db/23398553-a8a5-48e6-b9e8-6129a189e97b/length.bin
-recover_chroma.py
-memorias_backup.json
-diagnose_chroma.py
+# Local project data (sensitive or machine-specific)
+chroma_db/
+dante.log
+dante_legado.log
+diario.md
 diario_legado.md
-MiniIA.code-workspace
-backup.py
+*_backup.json
+backup_*.json
+memorias_backup.json
 backup_pre_limpeza.json
-limpar_memoria.py
+MiniIA.code-workspace
+
+# Legacy or generated docs snapshots
+readme.old
