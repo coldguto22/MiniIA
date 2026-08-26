@@ -1,14 +1,15 @@
 # conversar.py
-import chromadb
 import os
-import numpy as np
 from datetime import datetime
 import ollama
 
+from miniia.memory.embedder import generate_embedding
+from miniia.memory.retriever import query_relevant_documents
+from miniia.memory.store import get_or_create_memory_collection
+
 # Configuração do ChromaDB (mesmo diretório do memoria.py)
-PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
-client = chromadb.PersistentClient(path=PERSIST_DIR)
-colecao = client.get_or_create_collection(name="memoria_da_ia")
+BASE_DIR = os.path.dirname(__file__)
+colecao = get_or_create_memory_collection(base_dir=BASE_DIR)
 
 # Histórico da conversa atual (mantido em RAM durante a sessão)
 historico = []
@@ -20,11 +21,7 @@ THRESHOLD = 0.7  # distância cosseno máxima para considerar uma memória relev
 
 def gerar_embedding(texto):
     """Gera embedding normalizado usando nomic-embed-text."""
-    response = ollama.embeddings(model='nomic-embed-text', prompt=texto)
-    emb = np.array(response['embedding'])
-    # Normalização para métrica cosseno
-    emb = emb / (np.linalg.norm(emb) + 1e-10)
-    return emb.tolist()
+    return generate_embedding(texto=texto, normalize=True)
 
 
 def buscar_contexto(pergunta, top_n=TOP_N, threshold=THRESHOLD):
@@ -33,28 +30,12 @@ def buscar_contexto(pergunta, top_n=TOP_N, threshold=THRESHOLD):
     Retorna apenas os documentos com distância <= threshold.
     """
     emb_pergunta = gerar_embedding(pergunta)
-    resultados = colecao.query(
-        query_embeddings=[emb_pergunta],
-        n_results=top_n,
-        include=["documents", "metadatas", "distances"]
+    return query_relevant_documents(
+        collection=colecao,
+        query_embedding=emb_pergunta,
+        top_n=top_n,
+        threshold=threshold,
     )
-
-    memorias = []
-    if resultados and resultados.get('documents') and resultados['documents'][0]:
-        docs = resultados['documents'][0]
-        dists = resultados.get('distances', [[]])
-        dists = dists[0] if dists and len(dists) > 0 else []
-
-        for i, doc in enumerate(docs):
-            # Se tem distância e ela está dentro do limite, ou se não tem distância (fallback)
-            if i < len(dists):
-                if dists[i] <= threshold:
-                    memorias.append(doc)
-            else:
-                # Se por algum motivo a distância não veio, mantém o documento
-                memorias.append(doc)
-
-    return memorias
 
 
 def main():

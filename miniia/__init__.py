@@ -1,0 +1,1 @@
+"""MiniIA package root."""

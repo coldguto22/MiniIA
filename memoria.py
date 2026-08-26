@@ -1,23 +1,16 @@
 # memoria.py
-import chromadb
-from chromadb.config import Settings
 from datetime import datetime
 import os
-import ollama
 
-PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
-client = chromadb.PersistentClient(path=PERSIST_DIR)
+from miniia.memory.embedder import generate_embedding
+from miniia.memory.store import get_or_create_memory_collection
 
-# Criar ou acessar coleção com métrica cosine
-colecao = client.get_or_create_collection(
-    name="memoria_da_ia",
-    metadata={"hnsw:space": "cosine"}
-)
+BASE_DIR = os.path.dirname(__file__)
+colecao = get_or_create_memory_collection(base_dir=BASE_DIR)
 
 def gerar_embedding(texto):
     """Gera embedding usando o modelo nomic-embed-text via Ollama."""
-    response = ollama.embeddings(model='nomic-embed-text', prompt=texto)
-    return response['embedding']
+    return generate_embedding(texto=texto, normalize=False)
 
 def registrar_lembranca(observacao, pensamento):
     """Armazena uma nova memória com embedding."""
