@@ -27,7 +27,16 @@ Este documento registra a adoção da Camada 1 da estratégia proposta: substitu
 - A integração via Ollama não expõe diretamente o estado interno do Mamba. Isso fica para a Camada 2, que poderá manipular o estado recorrente explicitamente.
 - Modelos baseados em GGUF podem não estar disponíveis em todos os ambientes, especialmente em ambientes sem rede ou sem espaço suficiente para download.
 - O fallback para Qwen é obrigatório e garante que o pipeline continue operando, mesmo quando o Mamba falha.
-- A instalação direta do modelo `hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF` via `ollama pull` falhou neste ambiente por um redirecionamento bloqueado para um host diferente do Ollama. Em consequência, a validação foi feita com o fallback habilitado e os benchmarks em modo seguro, mantendo a integração pronta para executar com o modelo real quando a distribuição via Ollama estiver acessível.
+- A instalação direta do modelo `hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF` via `ollama pull` falhou neste ambiente por um redirecionamento bloqueado para um host diferente do Ollama.
+- O modelo local `mamba-dante:latest` foi validado e não carrega corretamente: o servidor do Ollama encerra com erro de `check_tensor_dims` / shape mismatch, então ele não pode ser usado como System 1 válido neste ambiente.
+- Foi validado também que o catálogo do Ollama não disponibiliza um pacote Mamba funcional por `ollama pull` nesta instalação; `ollama pull mamba` e `ollama pull jamba` retornaram `file does not exist`, enquanto `qwen2.5:3b` funciona normalmente.
+- Em consequência, a base de trabalho foi revertida para Qwen como System 1 em produção, mantendo a arquitetura Mamba pronta para uso quando um pacote compatível estiver disponível.
+
+## Estado atual da migração
+
+- O suporte arquitetural para Mamba foi preservado via `dante/models/mamba_model.py` e `dante/config.py`.
+- A implementação permanece compatível e pronta para uma troca futura de modelo sem mexer no loop principal.
+- A configuração não deve apontar para o Mamba quebrado em ambiente de produção; o uso real do modelo precisa de um pacote válido do Ollama ou de um arquivo GGUF compatível com a versão do runtime do Ollama.
 
 ## Próximos passos
 

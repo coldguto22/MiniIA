@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-10-01T01:26:23Z",
+  "generated_at": "2026-10-01T02:06:27Z",
   "config": {
     "system1": {
       "provider": "ollama",
-      "model": "hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF",
+      "model": "qwen2.5:3b",
       "fallback": "qwen2.5:3b",
       "max_tokens": 512,
       "temperature": 0.7
@@ -148,125 +148,125 @@
       }
     },
     "mamba": {
-      "model": "hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF",
+      "model": "qwen2.5:3b",
       "results": [
         {
           "prompt": "Explique em duas frases por que a observação contínua ajuda uma IA a lembrar contexto.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=86",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=86",
           "elapsed_sec": 0.0,
           "tokens": 86
         },
         {
           "prompt": "Descreva uma rotina de trabalho eficiente para um time de engenharia de IA.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=75",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=75",
           "elapsed_sec": 0.0,
           "tokens": 75
         },
         {
           "prompt": "Escreva um resumo curto de um artigo sobre memória de longo prazo em modelos de linguagem.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=90",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=90",
           "elapsed_sec": 0.0,
           "tokens": 90
         },
         {
           "prompt": "Dê um exemplo de prompt útil para avaliar coerência em respostas curtas.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=72",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=72",
           "elapsed_sec": 0.0,
           "tokens": 72
         },
         {
           "prompt": "Explique o que é isolamento do modelo em um sistema multi-agente.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=65",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=65",
           "elapsed_sec": 0.0,
           "tokens": 65
         },
         {
           "prompt": "Crie uma frase criativa sobre uma estação do ano e um editor de código.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=71",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=71",
           "elapsed_sec": 0.0,
           "tokens": 71
         },
         {
           "prompt": "Como você descreveria a diferença entre atenção e estado recorrente em LLMs?",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=76",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=76",
           "elapsed_sec": 0.0,
           "tokens": 76
         },
         {
           "prompt": "Escreva um texto técnico sobre embeddings e recuperação por similaridade.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=73",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=73",
           "elapsed_sec": 0.0,
           "tokens": 73
         },
         {
           "prompt": "Responda em português em três frases sobre um cenário de automação doméstica.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=77",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=77",
           "elapsed_sec": 0.0,
           "tokens": 77
         },
         {
           "prompt": "Explique por que benchmarks devem incluir latência e qualidade em conjunto.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=75",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=75",
           "elapsed_sec": 0.0,
           "tokens": 75
         },
         {
           "prompt": "Crie uma mensagem curta para um usuário que acabou de começar a usar um assistente local.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=89",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=89",
           "elapsed_sec": 0.0,
           "tokens": 89
         },
         {
           "prompt": "Descreva em 2 linhas o trade-off entre velocidade e profundidade de raciocínio.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=79",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=79",
           "elapsed_sec": 0.0,
           "tokens": 79
         },
         {
           "prompt": "Quais cuidados um sistema de observação contínua deve ter com privacidade?",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=74",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=74",
           "elapsed_sec": 0.0,
           "tokens": 74
         },
         {
           "prompt": "Escreva uma pergunta útil para avaliar a capacidade de reflexão de uma IA.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=74",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=74",
           "elapsed_sec": 0.0,
           "tokens": 74
         },
         {
           "prompt": "Descreva uma experiência de uso de um diário humano em um sistema de IA.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=72",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=72",
           "elapsed_sec": 0.0,
           "tokens": 72
         },
         {
           "prompt": "Explique em poucas palavras o que é um state space model.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=57",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=57",
           "elapsed_sec": 0.0,
           "tokens": 57
         },
         {
           "prompt": "Crie uma resposta curta para uma tela de dashboard de produtividade.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=68",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=68",
           "elapsed_sec": 0.0,
           "tokens": 68
         },
         {
           "prompt": "Escreva uma observação reflexiva sobre rotina, atenção e memória.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=65",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=65",
           "elapsed_sec": 0.0,
           "tokens": 65
         },
         {
           "prompt": "Explique por que um fallback é importante em um pipeline de modelos locais.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=75",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=75",
           "elapsed_sec": 0.0,
           "tokens": 75
         },
         {
           "prompt": "Resuma em duas frases como o contexto pode melhorar respostas de IA.",
-          "response": "[simulado] modelo=hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF; prompt_len=68",
+          "response": "[simulado] modelo=qwen2.5:3b; prompt_len=68",
           "elapsed_sec": 0.0,
           "tokens": 68
         }
