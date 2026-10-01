@@ -63,6 +63,7 @@ logs/
 
 # Local project data (sensitive or machine-specific)
 chroma_db/
+chroma_db.zip
 dante.log
 dante_legado.log
 diario.md

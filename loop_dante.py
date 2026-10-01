@@ -18,6 +18,8 @@ import chromadb
 import ollama
 import numpy as np
 
+from dante.config import load_models_config
+
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
 CYCLES_PARA_DIARIO = 5
@@ -26,8 +28,9 @@ TOP_N_MEMORIAS = 5
 MAX_CHARS_EMBEDDING = 4000
 MAX_CHARS_MEMORIA_REFLEXAO = 300
 MAX_CHARS_CONTEXTO_REFLEXAO = 1000
-MODELO_OBSERVACAO = "qwen2.5:3b"
-MODELO_DIARIO = "llama3.1:8b"
+_MODEL_CONFIG = load_models_config()
+MODELO_OBSERVACAO = _MODEL_CONFIG["system1"]["model"]
+MODELO_DIARIO = _MODEL_CONFIG["system2"]["model"]
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
 
@@ -43,11 +46,16 @@ ULTIMO_CICLO_PESQUISA = 0           # Controle interno (não alterar)
 
 # --- Inicialização do ChromaDB (base persistente) ---
 PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
-client = chromadb.PersistentClient(path=PERSIST_DIR)
-colecao = client.get_or_create_collection(
-    name="memoria_da_ia",
-    metadata={"hnsw:space": "cosine"}
-)
+try:
+    client = chromadb.PersistentClient(path=PERSIST_DIR)
+    colecao = client.get_or_create_collection(
+        name="memoria_da_ia",
+        metadata={"hnsw:space": "cosine"}
+    )
+except BaseException as exc:  # pragma: no cover - runtime/environment guard
+    print(f"Aviso: ChromaDB indisponível em loop_dante.py ({exc}).")
+    client = None
+    colecao = None
 
 # --- Funções auxiliares ---
 
@@ -115,6 +123,8 @@ def tela_mudou(hash_anterior):
         return False, hash_anterior
 
 def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOLD_SIMILARIDADE):
+    if colecao is None:
+        return []
     emb = gerar_embedding(texto)
     resultados = colecao.query(
         query_embeddings=[emb],
@@ -238,6 +248,8 @@ def parece_recusa(texto):
     return any(padrao in texto_lower for padrao in PADROES_RECUSA)
 
 def salvar_na_memoria(documento, tipo, usar_embedding=True):
+    if colecao is None:
+        return
     timestamp = datetime.now().isoformat()
     doc_truncado = documento[:MAX_CHARS_EMBEDDING] if len(documento) > MAX_CHARS_EMBEDDING else documento
     dados = {
