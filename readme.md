@@ -8,7 +8,7 @@ O projeto não busca simular consciência, mas investigar quais condições estr
 
 Dante usa uma arquitetura de dois modelos, rodando via [Ollama](https://ollama.com/):
 
-- **Qwen2.5:3b** — modelo rápido, responsável pelo "pensamento" imediato sobre o que está na tela, pela reflexão de curto prazo e pela detecção de curiosidade (System 1).
+- **Mamba via Ollama** — modelo rápido, responsável pelo "pensamento" imediato sobre o que está na tela, pela reflexão de curto prazo e pela detecção de curiosidade (System 1).
 - **Llama 3.1:8b** — modelo mais lento, usado para entradas de diário e para os aprendizados gerados a partir de pesquisas autônomas (System 2).
 - **ChromaDB** — armazena tudo como embeddings (gerados com `nomic-embed-text`), permitindo que Dante recupere memórias relacionadas ao que está observando agora. A base é **persistente entre execuções** — reiniciar o loop não apaga a memória acumulada.
 - **Tesseract (OCR)** — extrai texto da tela a cada ciclo de observação.
@@ -18,7 +18,7 @@ O ciclo do loop principal (`loop_dante.py`) é:
 
 1. Verifica se a tela mudou (hash de pixels) — evita processar a mesma tela repetidamente.
 2. Captura a tela e extrai texto via OCR; se o texto for idêntico ao ciclo anterior ou for curto demais para ter conteúdo legível, o ciclo é pulado ou o salvamento na memória é ignorado.
-3. Gera um "pensamento" sobre o que foi observado (Qwen2.5:3b).
+3. Gera um "pensamento" sobre o que foi observado (Mamba via Ollama, com fallback para Qwen2.5:3b).
 4. A cada `CYCLES_ENTRE_PESQUISAS` ciclos, avalia se o pensamento contém uma curiosidade pesquisável; se sim, busca na web (Asas), gera um aprendizado (Llama 3.1:8b) e registra no diário e na memória imediatamente.
 5. Busca memórias relacionadas no ChromaDB.
 6. Gera uma reflexão conectando observação atual e memórias (ou uma reflexão livre, se nada relevante for encontrado).
@@ -27,11 +27,23 @@ O ciclo do loop principal (`loop_dante.py`) é:
 
 Tudo é logado em `dante.log`.
 
+## Arquitetura Mamba (Camada 1)
+
+A arquitetura atual do Dante foi ajustada para suportar a Camada 1 da migração para Mamba como System 1, mantendo o Llama 3.1:8b como System 2:
+
+- **System 1 (Mamba via Ollama):** responsável pela observação rápida e geração do pensamento inicial.
+- **System 2 (Llama 3.1:8b):** responsável pelo diário, reflexão mais lenta e geração de aprendizados.
+- **Fallback obrigatório:** se o Mamba falhar, o sistema usa `qwen2.5:3b` automaticamente e registra a falha em logs estruturados.
+- **Configuração centralizada:** `config/models.yaml` define os modelos e parâmetros de geração.
+
+A configuração padrão está em `config/models.yaml` e pode ser alterada sem mexer no loop principal.
+
 ## Pré-requisitos
 
 - Python 3.10+
 - [Ollama](https://ollama.com/) instalado e rodando, com os modelos baixados:
   ```
+  ollama pull hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF
   ollama pull qwen2.5:3b
   ollama pull llama3.1:8b
   ollama pull nomic-embed-text
@@ -117,10 +129,21 @@ O projeto agora usa pytest com separação entre testes unitários e de integra�
   ```
   pytest -m "integration and not ollama"
   ```
-4. Rode tudo que não depende de Ollama:
+4. Rode testes de benchmark:
+  ```
+  pytest -m "benchmark"
+  ```
+5. Rode tudo que não depende de Ollama:
   ```
   pytest -m "not ollama"
   ```
+
+### Cobertura e benchmarks
+
+```bash
+pytest --cov=dante --cov-report=html
+python benchmarks/compare_system1.py
+```
 
 ### Testes com Ollama (opcional)
 
@@ -174,4 +197,4 @@ Quando necessário, publique apenas modelos sem segredo, como `.env.example`.
 - `dante.log` e `diario.md` são ignorados pelo Git (dados pessoais/experimentais do Guto), mas são gerados localmente a cada execução.
 - O diário (`diario.md`) tende a ser o output de maior qualidade introspectiva do sistema, gerado pelo Llama 3.1:8b a cada 5 ciclos do loop. O prompt evita pedir que Dante reproduza o conteúdo observado diretamente, para reduzir recusas do modelo em telas com conteúdo sensível ou ambíguo.
 - Textos extraídos por OCR com menos de 30 caracteres são tratados como ruído: o ciclo ainda gera pensamento/reflexão, mas nada é salvo na memória persistente.
-- A pesquisa autônoma (Asas) roda no máximo a cada `CYCLES_ENTRE_PESQUISAS` ciclos (padrão: 8) e só dispara quando o detector de curiosidade (Qwen2.5:3b) identifica uma pergunta genuína no pensamento atual.# Dante (MiniIA)
+- A pesquisa autônoma (Asas) roda no máximo a cada `CYCLES_ENTRE_PESQUISAS` ciclos (padrão: 8) e só dispara quando o detector de curiosidade do System 1 identifica uma pergunta genuína no pensamento atual.# Dante (MiniIA)
