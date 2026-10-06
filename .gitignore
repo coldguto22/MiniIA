@@ -1,6 +1,8 @@
 # Python runtime and cache
 __pycache__/
+**/__pycache__/
 *.py[cod]
+*.pyc
 *$py.class
 *.so
 .Python
@@ -66,6 +68,8 @@ chroma_db/
 chroma_db.zip
 dante.log
 dante_legado.log
+dante_state.json
+dante_state.json.*
 diario.md
 diario_legado.md
 *_backup.json
@@ -76,3 +80,9 @@ MiniIA.code-workspace
 
 # Legacy or generated docs snapshots
 readme.old
+CONTEXTO DO PROJETO_MiniIA_Dante.txt
+Readme.new.txt
+dante_pearson_ncm.ipynb
+__pycache__/capturador.cpython-313.pyc
+__pycache__/capturador.cpython-313.pyc
+__pycache__/memoria.cpython-313.pyc

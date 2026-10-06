@@ -8,8 +8,8 @@ O projeto não busca simular consciência, mas investigar quais condições estr
 
 Dante usa uma arquitetura de dois modelos, rodando via [Ollama](https://ollama.com/):
 
-- **Mamba via Ollama** — modelo rápido, responsável pelo "pensamento" imediato sobre o que está na tela, pela reflexão de curto prazo e pela detecção de curiosidade (System 1).
-- **Llama 3.1:8b** — modelo mais lento, usado para entradas de diário e para os aprendizados gerados a partir de pesquisas autônomas (System 2).
+- **Qwen2.5:3b via Ollama** — modelo rápido, responsável pelo pensamento imediato (System 1).
+- **Llama 3.1:8b** — modelo mais lento, usado para reflexões, entradas de diário, conversas e aprendizados gerados por pesquisas autônomas (System 2).
 - **ChromaDB** — armazena tudo como embeddings (gerados com `nomic-embed-text`), permitindo que Dante recupere memórias relacionadas ao que está observando agora. A base é **persistente entre execuções** — reiniciar o loop não apaga a memória acumulada.
 - **Tesseract (OCR)** — extrai texto da tela a cada ciclo de observação.
 - **Asas** (`asas.py`) — módulo de pesquisa autônoma via DuckDuckGo (biblioteca `ddgs`). Permite que Dante busque na internet quando um pensamento contém uma curiosidade genuína.
@@ -18,7 +18,7 @@ O ciclo do loop principal (`loop_dante.py`) é:
 
 1. Verifica se a tela mudou (hash de pixels) — evita processar a mesma tela repetidamente.
 2. Captura a tela e extrai texto via OCR; se o texto for idêntico ao ciclo anterior ou for curto demais para ter conteúdo legível, o ciclo é pulado ou o salvamento na memória é ignorado.
-3. Gera um "pensamento" sobre o que foi observado (Mamba via Ollama, com fallback para Qwen2.5:3b).
+3. Gera um "pensamento" sobre o que foi observado (Qwen2.5:3b via Ollama).
 4. A cada `CYCLES_ENTRE_PESQUISAS` ciclos, avalia se o pensamento contém uma curiosidade pesquisável; se sim, busca na web (Asas), gera um aprendizado (Llama 3.1:8b) e registra no diário e na memória imediatamente.
 5. Busca memórias relacionadas no ChromaDB.
 6. Gera uma reflexão conectando observação atual e memórias (ou uma reflexão livre, se nada relevante for encontrado).
@@ -27,13 +27,26 @@ O ciclo do loop principal (`loop_dante.py`) é:
 
 Tudo é logado em `dante.log`.
 
-## Arquitetura Mamba (Camada 1)
+Os módulos novos em `dante/core/` mantêm snapshots locais de valência e
+homeostase. Ciclos sem mudança de tela ou com OCR idêntico são registrados como
+silêncio; mudanças com texto legível seguem para o pensamento. Os arquivos de
+estado ficam ignorados pelo Git junto com os demais dados locais.
 
-A arquitetura atual do Dante foi ajustada para suportar a Camada 1 da migração para Mamba como System 1, mantendo o Llama 3.1:8b como System 2:
+### Consolidação do diário
 
-- **System 1 (Mamba via Ollama):** responsável pela observação rápida e geração do pensamento inicial.
-- **System 2 (Llama 3.1:8b):** responsável pelo diário, reflexão mais lenta e geração de aprendizados.
-- **Fallback obrigatório:** se o Mamba falhar, o sistema usa `qwen2.5:3b` automaticamente e registra a falha em logs estruturados.
+Na Fase 5, o diário original permanece intacto. A cada marco configurável de
+entradas, `dante/memory/consolidation.py` seleciona sinais significativos,
+detecta possíveis contradições e grava um capítulo em `diario_capitulos.md`.
+Entradas omitidas do capítulo não são apagadas: o número de retenções e
+omissões fica registrado para inspeção. Um sumarizador Llama pode ser injetado,
+mas existe uma síntese local determinística como fallback.
+
+## Modelos locais
+
+O projeto usa dois papéis de modelo via Ollama:
+
+- **System 1 (Qwen2.5:3b):** responsável pela observação rápida e geração do pensamento inicial.
+- **System 2 (Llama 3.1:8b):** responsável por reflexões longas, diário, conversas e aprendizados de pesquisas.
 - **Configuração centralizada:** `config/models.yaml` define os modelos e parâmetros de geração.
 
 A configuração padrão está em `config/models.yaml` e pode ser alterada sem mexer no loop principal.
@@ -43,7 +56,6 @@ A configuração padrão está em `config/models.yaml` e pode ser alterada sem m
 - Python 3.10+
 - [Ollama](https://ollama.com/) instalado e rodando, com os modelos baixados:
   ```
-  ollama pull hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF
   ollama pull qwen2.5:3b
   ollama pull llama3.1:8b
   ollama pull nomic-embed-text
@@ -82,12 +94,10 @@ Com o ambiente virtual ativado, execute o script desejado diretamente:
 | `python alimentar_memoria.py` | Permite inserir manualmente um texto na memória do Dante (ex: conhecimento fundacional, conversas importantes). Cole o texto e finalize com `END`. |
 | `python ver_memorias.py` | Lista as memórias mais recentes armazenadas no ChromaDB (ID, tipo, data e prévia do conteúdo) — útil para inspecionar o que Dante já registrou. |
 
-### Outros scripts (suporte/legado)
+### Scripts legados e compatibilidade
 
-- `main.py` — versão simplificada de um único ciclo de observação (sem loop contínuo). Útil para testes rápidos.
-- `memoria.py` — funções básicas de registro e leitura de memória, usado historicamente antes do `loop_dante.py` assumir essa lógica.
-- `capturador.py` — módulo de captura de tela e OCR, usado pelos outros scripts. Pode ser executado isoladamente para testar a qualidade do OCR.
-- `cerebro.py` — módulo de geração de pensamento usado pelo `main.py` (versão de ciclo único).
+- `legacy/` — implementações anteriores de `capturador.py`, `cerebro.py`, `memoria.py` e `main.py`, preservadas para referência e compatibilidade.
+- `main.py`, `memoria.py`, `capturador.py` e `cerebro.py` — shims mínimos na raiz que encaminham para `legacy/`; o caminho ativo usa `dante/`.
 - `asas.py` — módulo de pesquisa autônoma (DuckDuckGo/`ddgs`), usado internamente pelo `loop_dante.py`. Pode ser importado isoladamente para testar buscas.
 - `test_persist.py` / `test_read.py` — scripts de teste para verificar a persistência do ChromaDB.
 
@@ -106,6 +116,10 @@ Os scripts operacionais e manuais foram centralizados na pasta `scripts/` para r
 - `scripts/manual/test_read.py`
 
 Os arquivos da raiz com os mesmos nomes continuam existindo como wrappers de compatibilidade.
+
+O caminho ativo da refatoração fica em `dante/`: percepção, cognição, estados
+intrínsecos, memória, ação e o ciclo testável. `loop_dante.py` permanece como
+entry point compatível.
 
 ## Testes automatizados
 

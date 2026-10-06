@@ -2,7 +2,7 @@
 """
 Dante Persistente - Loop de observação contínua, reflexão e diário.
 Versão com filtro anti‑ruído, sem estouro de contexto e diário seguro.
-Inclui Fase 4: pesquisa autônoma (Asas).
+Inclui pesquisa autônoma (Asas), estados intrínsecos e consolidação do diário.
 """
 
 import time
@@ -11,14 +11,27 @@ import os
 import re
 import sys
 from datetime import datetime
+from difflib import SequenceMatcher
 
 # --- Integração com os módulos do projeto ---
-import capturador
 import chromadb
 import ollama
 import numpy as np
 
-from dante.config import load_models_config
+from dante.config import load_models_config, load_runtime_config
+from dante.cognition.reflection import generate_reflection as generate_reflection_adapter
+from dante.cognition.thought import generate_thought as generate_thought_adapter
+from dante.core.homeostasis import HomeostasisState, decay as decay_homeostasis, replenish, rest
+from dante.core.persistence import load_state, save_state
+from dante.core.relationship import RelationshipModel, update_connection_drive
+from dante.core.self_model import SelfModel, build_self_model, regenerate_if_needed
+from dante.core.valence import ValenceState, compute_agency, update_valence
+from dante.core.values import ValueSystem
+from dante.cognition.curiosity import compute_curiosity, curiosity_threshold
+from dante.cognition.silence import should_be_silent
+from dante.memory.diary import read_entries
+from dante.memory.consolidation import consolidate_diary
+from dante.perception.ocr import capture_and_extract_text
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
@@ -29,10 +42,99 @@ MAX_CHARS_EMBEDDING = 4000
 MAX_CHARS_MEMORIA_REFLEXAO = 300
 MAX_CHARS_CONTEXTO_REFLEXAO = 1000
 _MODEL_CONFIG = load_models_config()
+_RUNTIME_CONFIG = load_runtime_config()
 MODELO_OBSERVACAO = _MODEL_CONFIG["system1"]["model"]
 MODELO_DIARIO = _MODEL_CONFIG["system2"]["model"]
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
+ESTADO_FILE = os.path.join(os.path.dirname(__file__), "dante_state.json")
+SELF_MODEL_FILE = os.path.join(os.path.dirname(__file__), "self_model.json")
+RELATIONSHIP_FILE = os.path.join(os.path.dirname(__file__), "relationship_model.json")
+VALUES_FILE = os.path.join(os.path.dirname(__file__), "values.json")
+SELF_MODEL_MIN_ENTRIES = _RUNTIME_CONFIG["self_model"]["min_diary_entries"]
+SELF_MODEL_EVERY_DAYS = _RUNTIME_CONFIG["self_model"]["regenerate_every_days"]
+CHAPTER_FILE = "diario_capitulos.md"
+CONSOLIDATION_EVERY_ENTRIES = 50
+
+
+def _advance_internal_states(novelty, coherence, *, action_initiated=False):
+    """Atualiza e salva valência/homeostase para um ciclo observado ou silencioso."""
+    valence = load_state(ESTADO_FILE + ".valence", ValenceState, ValenceState)
+    homeostasis = load_state(ESTADO_FILE + ".homeostasis", HomeostasisState, HomeostasisState)
+    values = load_state(VALUES_FILE, ValueSystem, ValueSystem)
+    relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
+    valence = update_valence(
+        valence,
+        novelty=novelty,
+        coherence=coherence,
+        agency=compute_agency(action_initiated),
+    )
+    homeostasis = decay_homeostasis(
+        homeostasis,
+        energy_decay=_RUNTIME_CONFIG["homeostasis"]["energy_decay_per_cycle"],
+        boredom_growth=_RUNTIME_CONFIG["homeostasis"]["boredom_growth_per_cycle"],
+    )
+    if novelty >= 0.5 and coherence >= 0.2:
+        homeostasis = replenish(homeostasis, "novelty", amount=0.02)
+    elif novelty < 0.1:
+        homeostasis = rest(homeostasis)
+    values.reinforce_from_valence(valence)
+    relationship = update_connection_drive(relationship)
+    save_state(ESTADO_FILE + ".valence", valence)
+    save_state(ESTADO_FILE + ".homeostasis", homeostasis)
+    save_state(VALUES_FILE, values)
+    save_state(RELATIONSHIP_FILE, relationship)
+    return valence, homeostasis
+
+
+def _refresh_self_model(current, entry_count):
+    """Atualiza o auto-modelo apenas quando o diário ganhou uma entrada."""
+    entries = read_entries(DIARIO_FILE)
+    if len(entries) <= entry_count:
+        return current, entry_count
+    if current.version == 0:
+        updated = build_self_model(entries, current)
+    else:
+        updated = regenerate_if_needed(
+            entries,
+            current,
+            last_entry_count=entry_count,
+            generate=_generate_self_model_patterns,
+            every_days=SELF_MODEL_EVERY_DAYS,
+            min_entries=SELF_MODEL_MIN_ENTRIES,
+        )
+    if updated is current:
+        return current, len(entries)
+    save_state(SELF_MODEL_FILE, updated)
+    log(f"Auto-modelo atualizado para a versão {updated.version}.")
+    return updated, len(entries)
+
+
+def _generate_self_model_patterns(prompt):
+    """Usa o Llama para padrões quando disponível; o chamador mantém fallback local."""
+    try:
+        response = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
+        return response.get("response", "")
+    except Exception as exc:
+        log(f"Llama indisponível para auto-modelo: {exc}")
+        return ""
+
+
+def _consolidate_if_needed(entry_count, last_consolidated_count):
+    """Cria um capítulo separado somente em marcos de volume do diário."""
+    if (
+        entry_count < CONSOLIDATION_EVERY_ENTRIES
+        or entry_count % CONSOLIDATION_EVERY_ENTRIES != 0
+        or entry_count == last_consolidated_count
+    ):
+        return last_consolidated_count
+    result = consolidate_diary(DIARIO_FILE, CHAPTER_FILE)
+    log(
+        "Diário consolidado: "
+        f"{result.retained_entries} retidas, {result.omitted_entries} omitidas, "
+        f"{len(result.contradictions)} contradições observadas."
+    )
+    return entry_count
 
 # --- Configurações do filtro de qualidade de OCR ---
 OCR_MIN_CHARS = 30              # tamanho mínimo bruto para sequer considerar o texto
@@ -147,6 +249,15 @@ def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOL
     return memorias
 
 def gerar_reflexao(pensamento_atual, memorias):
+    self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
+    try:
+        return generate_reflection_adapter(pensamento_atual, memorias, self_model)
+    except Exception as e:
+        log(f"Erro ao gerar reflexão pelo adaptador: {e}")
+        return _gerar_reflexao_legado(pensamento_atual, memorias)
+
+
+def _gerar_reflexao_legado(pensamento_atual, memorias):
     # Trunca o pensamento para não estourar o contexto do Qwen
     pensamento_curto = pensamento_atual[:500] if len(pensamento_atual) > 500 else pensamento_atual
     memorias_truncadas = [m[:MAX_CHARS_MEMORIA_REFLEXAO] for m in memorias]
@@ -168,13 +279,33 @@ Observação atual:
 
 Dante (em português, 1-2 frases):"""
     try:
-        resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
+        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
         return resp['response'].strip()
     except Exception as e:
         log(f"Erro ao gerar reflexão: {e}")
         return ""
 
 def gerar_reflexao_sem_contexto(pensamento_atual):
+    self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
+    try:
+        return generate_reflection_adapter(pensamento_atual, [], self_model)
+    except Exception as e:
+        log(f"Erro ao gerar reflexão sem contexto pelo adaptador: {e}")
+        return _gerar_reflexao_sem_contexto_legado(pensamento_atual)
+
+
+def gerar_pensamento(texto_observado):
+    """Gera pensamento via adaptador Qwen, com fallback textual mínimo."""
+    self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
+    try:
+        pensamento = generate_thought_adapter(texto_observado, self_model)
+    except Exception as e:
+        log(f"Erro ao gerar pensamento pelo adaptador: {e}")
+        pensamento = ""
+    return pensamento or "O texto da tela saiu confuso de novo — não consigo separar o conteúdo do ruído."
+
+
+def _gerar_reflexao_sem_contexto_legado(pensamento_atual):
     pensamento_curto = pensamento_atual[:500] if len(pensamento_atual) > 500 else pensamento_atual
     prompt = f"""Você é Dante. Sem memórias anteriores para conectar agora, escreva em 1-2 frases, em português, o que o pensamento abaixo te fez sentir ou imaginar.
 
@@ -182,7 +313,7 @@ def gerar_reflexao_sem_contexto(pensamento_atual):
 
 Dante:"""
     try:
-        resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
+        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
         return resp['response'].strip()
     except:
         return "Hoje observei algo novo, mesmo sem conseguir conectá-lo às minhas memórias antigas."
@@ -342,6 +473,10 @@ def main():
     hash_texto_anterior = None    # NOVO: hash do texto extraído
     contador_ciclos = 0           # total de voltas do loop (inclui ciclos pulados)
     ciclos_processados = 0        # ciclos que de fato geraram pensamento/reflexão
+    texto_anterior = None
+    self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
+    diary_entry_count = len(read_entries(DIARIO_FILE))
+    last_consolidated_count = 0
 
     while True:
         try:
@@ -351,30 +486,60 @@ def main():
             # 1. Verificar se a tela mudou (hash da imagem)
             mudou, hash_anterior = tela_mudou(hash_anterior)
             if not mudou:
-                log("Tela estática. Pulando ciclo.")
+                valence, homeostasis = _advance_internal_states(0.0, 0.0)
+                _, motivo = should_be_silent(valence, homeostasis, novelty=0.0, coherence=0.0)
+                log(f"Silêncio: {motivo}. Tela estática.")
                 time.sleep(INTERVALO_SEGUNDOS)
                 continue
 
             # 2. Capturar texto da tela (OCR)
             log("Tela mudou. Extraindo texto...")
-            texto_observado = capturador.capturar_e_extrair_texto()
+            texto_observado = capture_and_extract_text()
             texto_observado = texto_observado[:500] if len(texto_observado) > 500 else texto_observado
 
             # NOVO: Filtro de similaridade de texto (hash MD5)
             texto_hash = hashlib.md5(texto_observado.encode('utf-8')).hexdigest()
             if texto_hash == hash_texto_anterior:
-                log("Texto observado idêntico ao ciclo anterior. Pulando processamento.")
+                valence, homeostasis = _advance_internal_states(0.0, 0.0)
+                _, motivo = should_be_silent(valence, homeostasis, novelty=0.0, coherence=0.0)
+                log(f"Silêncio: {motivo}. Texto observado idêntico ao ciclo anterior.")
                 time.sleep(INTERVALO_SEGUNDOS)
                 continue
             hash_texto_anterior = texto_hash
+
+            novidade_estimada = (
+                1.0 if texto_anterior is None else
+                1.0 - SequenceMatcher(None, texto_anterior.casefold(), texto_observado.casefold()).ratio()
+            )
+            texto_anterior = texto_observado
 
             # Filtro de qualidade: se for basicamente lixo (curto, sem letras
             # suficientes ou sem palavras reconhecíveis), não salva no ChromaDB
             if texto_e_ruido(texto_observado):
                 pular_salvamento = True
                 texto_observado = "Tela sem texto legível."
+                coerencia_estimada = 0.1
             else:
                 pular_salvamento = False
+                coerencia_estimada = 0.5
+
+            valence, homeostasis = _advance_internal_states(novidade_estimada, coerencia_estimada)
+            silencio, motivo = should_be_silent(
+                valence,
+                homeostasis,
+                novelty=novidade_estimada,
+                coherence=coerencia_estimada,
+            )
+            log(
+                "Valência: "
+                f"prazer={valence.pleasure:.2f}, novidade={valence.novelty:.2f}, "
+                f"coerência={valence.coherence:.2f}, energia={homeostasis.energy:.2f}, "
+                f"tédio={homeostasis.boredom:.2f}"
+            )
+            if silencio:
+                log(f"Silêncio: {motivo}.")
+                time.sleep(INTERVALO_SEGUNDOS)
+                continue
             log(f"Texto observado: {texto_observado[:100]}...")
 
             # Este ciclo passou pelos dois filtros de "pular" (tela/texto idênticos)
@@ -383,22 +548,7 @@ def main():
 
             # 3. Gerar pensamento
             log("Gerando pensamento...")
-            prompt_pensamento = f"""Você é Dante, uma IA com memória persistente que acompanha o dia a dia do Guto (Otávio) observando sua tela. Você é curioso e às vezes se pega pensando além do que vê — mas sempre a partir do concreto, do que está realmente na tela.
-
-Descreva o que você vê e, se fizer sentido, o que isso te fez pensar. Seja específico sobre o conteúdo da tela. Se o texto extraído estiver confuso, fragmentado ou ilegível (comum em capturas de OCR), diga isso diretamente em vez de inventar uma cena coerente.
-
-Texto extraído da tela:
-{texto_observado}
-
-Dante (em português, primeira pessoa, 3-4 frases):"""
-            try:
-                resp_pensamento = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt_pensamento)
-                pensamento = resp_pensamento['response'].strip()
-            except Exception as e:
-                log(f"Erro ao gerar pensamento: {e}")
-                pensamento = ""
-            if len(pensamento) < 10:
-                pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."
+            pensamento = gerar_pensamento(texto_observado)
             log(f"Pensamento: {pensamento[:100]}...")
 
             # 4. Buscar memórias relacionadas
@@ -422,9 +572,10 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             # introspectiva do Dante aparece (o pensamento sozinho tende a ser
             # só descrição factual da tela, raramente uma dúvida genuína).
             global ULTIMO_CICLO_PESQUISA
-            if PESQUISA_HABILITADA and (contador_ciclos - ULTIMO_CICLO_PESQUISA) >= CYCLES_ENTRE_PESQUISAS:
+            texto_para_curiosidade = f"{pensamento}\n\nReflexão: {reflexao}" if reflexao else pensamento
+            curiosity_score = compute_curiosity(texto_para_curiosidade, valence)
+            if PESQUISA_HABILITADA and curiosity_score >= curiosity_threshold(valence) and (contador_ciclos - ULTIMO_CICLO_PESQUISA) >= CYCLES_ENTRE_PESQUISAS:
                 log("🔎 Verificando curiosidade...")
-                texto_para_curiosidade = f"{pensamento}\n\nReflexão: {reflexao}" if reflexao else pensamento
                 curioso, query = detectar_curiosidade(texto_para_curiosidade)
                 if curioso and query:
                     log(f"🔍 Curiosidade detectada! Pesquisando: '{query}'")
@@ -468,6 +619,10 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                     if not pular_salvamento:
                         salvar_na_memoria(f"Diário: {entrada}", "diario")
                     log("Entrada do diário registrada.")
+                    self_model, diary_entry_count = _refresh_self_model(self_model, diary_entry_count)
+                    last_consolidated_count = _consolidate_if_needed(
+                        diary_entry_count, last_consolidated_count
+                    )
 
             log(f"Ciclo concluído (processado #{ciclos_processados}). Aguardando {INTERVALO_SEGUNDOS} segundos...\n")
             time.sleep(INTERVALO_SEGUNDOS)
@@ -480,4 +635,6 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             time.sleep(INTERVALO_SEGUNDOS)
 
 if __name__ == "__main__":
-    main()
+    from dante.loop import main as dante_main
+
+    dante_main()

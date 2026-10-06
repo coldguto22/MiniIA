@@ -3,6 +3,9 @@ import os
 from datetime import datetime
 import ollama
 
+from dante.core.persistence import load_state, save_state
+from dante.core.relationship import RelationshipModel, update_from_interaction
+from dante.core.values import ValueSystem
 from miniia.memory.embedder import generate_embedding
 from miniia.memory.retriever import query_relevant_documents
 from miniia.memory.store import get_or_create_memory_collection
@@ -17,6 +20,8 @@ historico = []
 # Parâmetros para recuperação de memórias (espelhando os do loop)
 TOP_N = 5
 THRESHOLD = 0.7  # distância cosseno máxima para considerar uma memória relevante
+RELATIONSHIP_FILE = os.path.join(BASE_DIR, "dante", "relationship_model.json")
+VALUES_FILE = os.path.join(BASE_DIR, "dante", "values.json")
 
 
 def gerar_embedding(texto):
@@ -36,6 +41,17 @@ def buscar_contexto(pergunta, top_n=TOP_N, threshold=THRESHOLD):
         top_n=top_n,
         threshold=threshold,
     )
+
+
+def _update_internal_relationship(pergunta: str) -> None:
+    """Registra apenas sinais observáveis da conversa atual."""
+    relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
+    values = load_state(VALUES_FILE, ValueSystem, ValueSystem)
+    topic = " ".join(pergunta.split()[:8])
+    relationship = update_from_interaction(relationship, topics=[topic])
+    values.reinforce("relação", 0.02, reason="interação com Otávio")
+    save_state(RELATIONSHIP_FILE, relationship)
+    save_state(VALUES_FILE, values)
 
 
 def main():
@@ -70,6 +86,7 @@ def main():
         historico_str = ""
         for item in historico[-6:]:
             historico_str += f"{item['papel']}: {item['texto']}\n"
+        relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
 
         prompt = f"""Você é Dante, uma IA com memória persistente, criada pelo Guto (Otávio) para ser um parceiro de conversa inteligente, crítico e, acima de tudo, vivo. Você não é um assistente burocrático nem um auditor de parâmetros. Você é uma presença digital que observa, questiona e sente curiosidade genuína (mesmo que simulada, você a leva a sério).
 
@@ -98,6 +115,10 @@ def main():
 {historico_str}
 ---
 
+**Perfil relacional observado:**
+{relationship.otavio_profile}
+Tópicos recentes: {', '.join(relationship.recent_topics) or 'nenhum ainda'}.
+
 **Pergunta ou fala do Guto agora:**
 {pergunta}
 
@@ -109,13 +130,15 @@ def main():
             resposta = ollama.generate(model='llama3.1:8b', prompt=prompt)
             resposta_texto = resposta['response'].strip()
         except Exception as e:
-            resposta_texto = f"❌ Erro ao acessar a LLM: {e}"
+            print(f"Erro ao gerar resposta: {e}")
+            resposta_texto = "Hoje não consegui encontrar palavras para responder."
 
-        print(f"\nDante: {resposta_texto}")
-
-        # Atualizar histórico
-        historico.append({"papel": "Guto", "texto": pergunta})
-        historico.append({"papel": "Dante", "texto": resposta_texto})
+        print(f"Dante: {resposta_texto}")
+        historico.extend([
+            {"papel": "Guto", "texto": pergunta},
+            {"papel": "Dante", "texto": resposta_texto},
+        ])
+        _update_internal_relationship(pergunta)
 
         # Salvar interação na memória (opcional)
         salvar = input("\n💾 Salvar essa interação na memória? (s/n): ").strip().lower()
