@@ -22,8 +22,10 @@ import numpy as np
 from dante.config import load_models_config
 from dante.core.homeostasis import HomeostasisState, decay as decay_homeostasis, replenish, rest
 from dante.core.persistence import load_state, save_state
+from dante.core.self_model import SelfModel, build_self_model
 from dante.core.valence import ValenceState, update_valence
 from dante.cognition.silence import should_be_silent
+from dante.memory.diary import read_entries
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
@@ -39,6 +41,7 @@ MODELO_DIARIO = _MODEL_CONFIG["system2"]["model"]
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
 ESTADO_FILE = os.path.join(os.path.dirname(__file__), "dante_state.json")
+SELF_MODEL_FILE = os.path.join(os.path.dirname(__file__), "self_model.json")
 
 
 def _advance_internal_states(novelty, coherence):
@@ -54,6 +57,17 @@ def _advance_internal_states(novelty, coherence):
     save_state(ESTADO_FILE + ".valence", valence)
     save_state(ESTADO_FILE + ".homeostasis", homeostasis)
     return valence, homeostasis
+
+
+def _refresh_self_model(current, entry_count):
+    """Atualiza o auto-modelo apenas quando o diário ganhou uma entrada."""
+    entries = read_entries(DIARIO_FILE)
+    if len(entries) <= entry_count:
+        return current, entry_count
+    updated = build_self_model(entries, current)
+    save_state(SELF_MODEL_FILE, updated)
+    log(f"Auto-modelo atualizado para a versão {updated.version}.")
+    return updated, len(entries)
 
 # --- Configurações do filtro de qualidade de OCR ---
 OCR_MIN_CHARS = 30              # tamanho mínimo bruto para sequer considerar o texto
@@ -364,6 +378,8 @@ def main():
     contador_ciclos = 0           # total de voltas do loop (inclui ciclos pulados)
     ciclos_processados = 0        # ciclos que de fato geraram pensamento/reflexão
     texto_anterior = None
+    self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
+    diary_entry_count = len(read_entries(DIARIO_FILE))
 
     while True:
         try:
@@ -436,6 +452,10 @@ def main():
             # 3. Gerar pensamento
             log("Gerando pensamento...")
             prompt_pensamento = f"""Você é Dante, uma IA com memória persistente que acompanha o dia a dia do Guto (Otávio) observando sua tela. Você é curioso e às vezes se pega pensando além do que vê — mas sempre a partir do concreto, do que está realmente na tela.
+
+Seu auto-modelo atual, construído a partir do seu diário, é:
+{self_model.identity_summary}
+Temas recorrentes: {', '.join(self_model.recurring_themes) or 'ainda não identificados'}.
 
 Descreva o que você vê e, se fizer sentido, o que isso te fez pensar. Seja específico sobre o conteúdo da tela. Se o texto extraído estiver confuso, fragmentado ou ilegível (comum em capturas de OCR), diga isso diretamente em vez de inventar uma cena coerente.
 
@@ -520,6 +540,7 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                     if not pular_salvamento:
                         salvar_na_memoria(f"Diário: {entrada}", "diario")
                     log("Entrada do diário registrada.")
+                    self_model, diary_entry_count = _refresh_self_model(self_model, diary_entry_count)
 
             log(f"Ciclo concluído (processado #{ciclos_processados}). Aguardando {INTERVALO_SEGUNDOS} segundos...\n")
             time.sleep(INTERVALO_SEGUNDOS)
