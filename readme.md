@@ -34,6 +34,8 @@ A arquitetura atual do Dante foi ajustada para suportar a Camada 1 da migração
 - **System 1 (Mamba via Ollama):** responsável pela observação rápida e geração do pensamento inicial.
 - **System 2 (Llama 3.1:8b):** responsável pelo diário, reflexão mais lenta e geração de aprendizados.
 - **Fallback obrigatório:** se o Mamba falhar, o sistema usa `qwen2.5:3b` automaticamente e registra a falha em logs estruturados.
+- **Observação importante:** o Mamba-2.8b usado aqui é um modelo base, não instruído, então ele pode continuar texto em vez de seguir instruções com precisão. Por isso o fallback automático para `qwen2.5:3b` existe e é parte importante do comportamento atual.
+- **Estado experimental:** essa configuração é experimental e pode ser revertida conforme a estabilidade do modelo e do ambiente.
 - **Configuração centralizada:** `config/models.yaml` define os modelos e parâmetros de geração.
 
 A configuração padrão está em `config/models.yaml` e pode ser alterada sem mexer no loop principal.

@@ -358,7 +358,7 @@ def main():
             # 2. Capturar texto da tela (OCR)
             log("Tela mudou. Extraindo texto...")
             texto_observado = capturador.capturar_e_extrair_texto()
-            texto_observado = texto_observado[:500] if len(texto_observado) > 500 else texto_observado
+            texto_observado = texto_observado[:300] if len(texto_observado) > 300 else texto_observado
 
             # NOVO: Filtro de similaridade de texto (hash MD5)
             texto_hash = hashlib.md5(texto_observado.encode('utf-8')).hexdigest()
@@ -395,8 +395,13 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
                 resp_pensamento = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt_pensamento)
                 pensamento = resp_pensamento['response'].strip()
             except Exception as e:
-                log(f"Erro ao gerar pensamento: {e}")
-                pensamento = ""
+                log(f"Mamba falhou: {e}. Usando fallback Qwen.")
+                try:
+                    resp_pensamento = ollama.generate(model=_MODEL_CONFIG["system1"]["fallback"], prompt=prompt_pensamento)
+                    pensamento = resp_pensamento['response'].strip()
+                except Exception as fallback_error:
+                    log(f"Fallback Qwen também falhou: {fallback_error}")
+                    pensamento = ""
             if len(pensamento) < 10:
                 pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."
             log(f"Pensamento: {pensamento[:100]}...")
