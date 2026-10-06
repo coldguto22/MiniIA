@@ -1,13 +1,9 @@
-# capturador.py
-def capturar_e_extrair_texto():
-    """Compatibilidade com os módulos antigos; implementação em dante.perception."""
-    from dante.perception.ocr import capture_and_extract_text
+"""Compatibilidade para o capturador anterior à refatoração."""
 
-    print("🖼️ Tela capturada e processada. Executando OCR...")
-    return capture_and_extract_text()
+from legacy.capturador import capturar_e_extrair_texto
+
+__all__ = ["capturar_e_extrair_texto"]
+
 
 if __name__ == "__main__":
-    texto_encontrado = capturar_e_extrair_texto()
-    print("--- TEXTO ENCONTRADO NA TELA ---")
-    print(texto_encontrado)
-    print("-------------------------------")
+    print(capturar_e_extrair_texto())

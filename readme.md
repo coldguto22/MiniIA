@@ -9,7 +9,7 @@ O projeto não busca simular consciência, mas investigar quais condições estr
 Dante usa uma arquitetura de dois modelos, rodando via [Ollama](https://ollama.com/):
 
 - **Qwen2.5:3b via Ollama** — modelo rápido, responsável pelo pensamento imediato (System 1).
-- **Llama 3.1:8b** — modelo mais lento, usado para entradas de diário e para os aprendizados gerados a partir de pesquisas autônomas (System 2).
+- **Llama 3.1:8b** — modelo mais lento, usado para reflexões, entradas de diário, conversas e aprendizados gerados por pesquisas autônomas (System 2).
 - **ChromaDB** — armazena tudo como embeddings (gerados com `nomic-embed-text`), permitindo que Dante recupere memórias relacionadas ao que está observando agora. A base é **persistente entre execuções** — reiniciar o loop não apaga a memória acumulada.
 - **Tesseract (OCR)** — extrai texto da tela a cada ciclo de observação.
 - **Asas** (`asas.py`) — módulo de pesquisa autônoma via DuckDuckGo (biblioteca `ddgs`). Permite que Dante busque na internet quando um pensamento contém uma curiosidade genuína.
@@ -46,8 +46,7 @@ mas existe uma síntese local determinística como fallback.
 O projeto usa dois papéis de modelo via Ollama:
 
 - **System 1 (Qwen2.5:3b):** responsável pela observação rápida e geração do pensamento inicial.
-- **System 2 (Llama 3.1:8b):** responsável pelo diário, reflexão mais lenta e geração de aprendizados.
-- **System 2 (Llama 3.1:8b):** responsável por reflexões longas, diário e aprendizados de pesquisas.
+- **System 2 (Llama 3.1:8b):** responsável por reflexões longas, diário, conversas e aprendizados de pesquisas.
 - **Configuração centralizada:** `config/models.yaml` define os modelos e parâmetros de geração.
 
 A configuração padrão está em `config/models.yaml` e pode ser alterada sem mexer no loop principal.
@@ -95,12 +94,10 @@ Com o ambiente virtual ativado, execute o script desejado diretamente:
 | `python alimentar_memoria.py` | Permite inserir manualmente um texto na memória do Dante (ex: conhecimento fundacional, conversas importantes). Cole o texto e finalize com `END`. |
 | `python ver_memorias.py` | Lista as memórias mais recentes armazenadas no ChromaDB (ID, tipo, data e prévia do conteúdo) — útil para inspecionar o que Dante já registrou. |
 
-### Outros scripts (suporte/legado)
+### Scripts legados e compatibilidade
 
-- `main.py` — versão simplificada de um único ciclo de observação (sem loop contínuo). Útil para testes rápidos.
-- `memoria.py` — funções básicas de registro e leitura de memória, usado historicamente antes do `loop_dante.py` assumir essa lógica.
-- `capturador.py` — módulo de captura de tela e OCR, usado pelos outros scripts. Pode ser executado isoladamente para testar a qualidade do OCR.
-- `cerebro.py` — módulo de geração de pensamento usado pelo `main.py` (versão de ciclo único).
+- `legacy/` — implementações anteriores de `capturador.py`, `cerebro.py`, `memoria.py` e `main.py`, preservadas para referência e compatibilidade.
+- `main.py`, `memoria.py`, `capturador.py` e `cerebro.py` — shims mínimos na raiz que encaminham para `legacy/`; o caminho ativo usa `dante/`.
 - `asas.py` — módulo de pesquisa autônoma (DuckDuckGo/`ddgs`), usado internamente pelo `loop_dante.py`. Pode ser importado isoladamente para testar buscas.
 - `test_persist.py` / `test_read.py` — scripts de teste para verificar a persistência do ChromaDB.
 
@@ -119,6 +116,10 @@ Os scripts operacionais e manuais foram centralizados na pasta `scripts/` para r
 - `scripts/manual/test_read.py`
 
 Os arquivos da raiz com os mesmos nomes continuam existindo como wrappers de compatibilidade.
+
+O caminho ativo da refatoração fica em `dante/`: percepção, cognição, estados
+intrínsecos, memória, ação e o ciclo testável. `loop_dante.py` permanece como
+entry point compatível.
 
 ## Testes automatizados
 

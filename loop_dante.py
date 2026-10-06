@@ -2,7 +2,7 @@
 """
 Dante Persistente - Loop de observação contínua, reflexão e diário.
 Versão com filtro anti‑ruído, sem estouro de contexto e diário seguro.
-Inclui Fase 4: pesquisa autônoma (Asas).
+Inclui pesquisa autônoma (Asas), estados intrínsecos e consolidação do diário.
 """
 
 import time
@@ -14,7 +14,6 @@ from datetime import datetime
 from difflib import SequenceMatcher
 
 # --- Integração com os módulos do projeto ---
-import capturador
 import chromadb
 import ollama
 import numpy as np
@@ -32,6 +31,7 @@ from dante.cognition.curiosity import compute_curiosity, curiosity_threshold
 from dante.cognition.silence import should_be_silent
 from dante.memory.diary import read_entries
 from dante.memory.consolidation import consolidate_diary
+from dante.perception.ocr import capture_and_extract_text
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
@@ -494,7 +494,7 @@ def main():
 
             # 2. Capturar texto da tela (OCR)
             log("Tela mudou. Extraindo texto...")
-            texto_observado = capturador.capturar_e_extrair_texto()
+            texto_observado = capture_and_extract_text()
             texto_observado = texto_observado[:500] if len(texto_observado) > 500 else texto_observado
 
             # NOVO: Filtro de similaridade de texto (hash MD5)

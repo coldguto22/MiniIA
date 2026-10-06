@@ -5,16 +5,16 @@
 O trabalho novo parte da base estável `origin/main`, mantém Qwen2.5:3b e Llama
 3.1:8b via Ollama e não inclui a implementação experimental de Mamba.
 
-- **Fase 1 — Fundação:** pacote `dante/` por domínio, captura/OCR em
-  `dante/perception/`, entrada compatível em `dante.loop` e configuração
-  centralizada dos modelos. Fundação criada; migração do loop segue incremental.
-- **Fase 2 — Valência e silêncio:** estados intrínsecos, homeostase e decisão
-  explícita de silêncio. Módulos integrados ao ciclo para registrar repetição,
-  modular silêncio e persistir os estados locais.
-- **Fase 3 — Auto-modelo:** extração de padrões das entradas do diário e
-  atualização periódica do modelo de si.
-- **Fase 4 — Relação e valores:** modelo evolutivo de Otávio e preferências
-  estáveis derivadas da experiência.
+- **Fase 1 — Fundação:** implementada. O caminho ativo está em `dante/`, os
+  módulos históricos estão em `legacy/` e os entry points raiz permanecem como
+  shims de compatibilidade.
+- **Fase 2 — Valência e silêncio:** implementada. Estados intrínsecos,
+  homeostase, decisão explícita de silêncio, persistência e configuração foram
+  integrados ao ciclo testável e ao loop legado.
+- **Fase 3 — Auto-modelo:** implementada. O diário alimenta o modelo de si,
+  com regeneração periódica e sumarização Llama opcional com fallback local.
+- **Fase 4 — Relação e valores:** implementada. O modelo de Otávio, o drive de
+  conexão e os valores emergentes evoluem por interação e sinais de valência.
 - **Fase 5 — Consolidação:** implementada nesta branch com síntese seletiva,
   capítulos separados, contradições auditáveis, documentação e validação
   integrada. O diário original não é apagado.
