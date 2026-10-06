@@ -1,6 +1,8 @@
 # Python runtime and cache
 __pycache__/
+**/__pycache__/
 *.py[cod]
+*.pyc
 *$py.class
 *.so
 .Python
@@ -80,3 +82,7 @@ MiniIA.code-workspace
 readme.old
 CONTEXTO DO PROJETO_MiniIA_Dante.txt
 Readme.new.txt
+dante_pearson_ncm.ipynb
+__pycache__/capturador.cpython-313.pyc
+__pycache__/capturador.cpython-313.pyc
+__pycache__/memoria.cpython-313.pyc
