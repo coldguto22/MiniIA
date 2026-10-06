@@ -11,6 +11,7 @@ import os
 import re
 import sys
 from datetime import datetime
+from difflib import SequenceMatcher
 
 # --- Integração com os módulos do projeto ---
 import capturador
@@ -19,6 +20,10 @@ import ollama
 import numpy as np
 
 from dante.config import load_models_config
+from dante.core.homeostasis import HomeostasisState, decay as decay_homeostasis, replenish, rest
+from dante.core.persistence import load_state, save_state
+from dante.core.valence import ValenceState, update_valence
+from dante.cognition.silence import should_be_silent
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
@@ -33,6 +38,22 @@ MODELO_OBSERVACAO = _MODEL_CONFIG["system1"]["model"]
 MODELO_DIARIO = _MODEL_CONFIG["system2"]["model"]
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
+ESTADO_FILE = os.path.join(os.path.dirname(__file__), "dante_state.json")
+
+
+def _advance_internal_states(novelty, coherence):
+    """Atualiza e salva valência/homeostase para um ciclo observado ou silencioso."""
+    valence = load_state(ESTADO_FILE + ".valence", ValenceState, ValenceState)
+    homeostasis = load_state(ESTADO_FILE + ".homeostasis", HomeostasisState, HomeostasisState)
+    valence = update_valence(valence, novelty=novelty, coherence=coherence)
+    homeostasis = decay_homeostasis(homeostasis)
+    if novelty >= 0.5 and coherence >= 0.2:
+        homeostasis = replenish(homeostasis, "novelty", amount=0.02)
+    elif novelty < 0.1:
+        homeostasis = rest(homeostasis)
+    save_state(ESTADO_FILE + ".valence", valence)
+    save_state(ESTADO_FILE + ".homeostasis", homeostasis)
+    return valence, homeostasis
 
 # --- Configurações do filtro de qualidade de OCR ---
 OCR_MIN_CHARS = 30              # tamanho mínimo bruto para sequer considerar o texto
@@ -168,7 +189,7 @@ Observação atual:
 
 Dante (em português, 1-2 frases):"""
     try:
-        resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
+        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
         return resp['response'].strip()
     except Exception as e:
         log(f"Erro ao gerar reflexão: {e}")
@@ -182,7 +203,7 @@ def gerar_reflexao_sem_contexto(pensamento_atual):
 
 Dante:"""
     try:
-        resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
+        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
         return resp['response'].strip()
     except:
         return "Hoje observei algo novo, mesmo sem conseguir conectá-lo às minhas memórias antigas."
@@ -342,6 +363,7 @@ def main():
     hash_texto_anterior = None    # NOVO: hash do texto extraído
     contador_ciclos = 0           # total de voltas do loop (inclui ciclos pulados)
     ciclos_processados = 0        # ciclos que de fato geraram pensamento/reflexão
+    texto_anterior = None
 
     while True:
         try:
@@ -351,7 +373,9 @@ def main():
             # 1. Verificar se a tela mudou (hash da imagem)
             mudou, hash_anterior = tela_mudou(hash_anterior)
             if not mudou:
-                log("Tela estática. Pulando ciclo.")
+                valence, homeostasis = _advance_internal_states(0.0, 0.0)
+                _, motivo = should_be_silent(valence, homeostasis, novelty=0.0, coherence=0.0)
+                log(f"Silêncio: {motivo}. Tela estática.")
                 time.sleep(INTERVALO_SEGUNDOS)
                 continue
 
@@ -363,18 +387,46 @@ def main():
             # NOVO: Filtro de similaridade de texto (hash MD5)
             texto_hash = hashlib.md5(texto_observado.encode('utf-8')).hexdigest()
             if texto_hash == hash_texto_anterior:
-                log("Texto observado idêntico ao ciclo anterior. Pulando processamento.")
+                valence, homeostasis = _advance_internal_states(0.0, 0.0)
+                _, motivo = should_be_silent(valence, homeostasis, novelty=0.0, coherence=0.0)
+                log(f"Silêncio: {motivo}. Texto observado idêntico ao ciclo anterior.")
                 time.sleep(INTERVALO_SEGUNDOS)
                 continue
             hash_texto_anterior = texto_hash
+
+            novidade_estimada = (
+                1.0 if texto_anterior is None else
+                1.0 - SequenceMatcher(None, texto_anterior.casefold(), texto_observado.casefold()).ratio()
+            )
+            texto_anterior = texto_observado
 
             # Filtro de qualidade: se for basicamente lixo (curto, sem letras
             # suficientes ou sem palavras reconhecíveis), não salva no ChromaDB
             if texto_e_ruido(texto_observado):
                 pular_salvamento = True
                 texto_observado = "Tela sem texto legível."
+                coerencia_estimada = 0.1
             else:
                 pular_salvamento = False
+                coerencia_estimada = 0.5
+
+            valence, homeostasis = _advance_internal_states(novidade_estimada, coerencia_estimada)
+            silencio, motivo = should_be_silent(
+                valence,
+                homeostasis,
+                novelty=novidade_estimada,
+                coherence=coerencia_estimada,
+            )
+            log(
+                "Valência: "
+                f"prazer={valence.pleasure:.2f}, novidade={valence.novelty:.2f}, "
+                f"coerência={valence.coherence:.2f}, energia={homeostasis.energy:.2f}, "
+                f"tédio={homeostasis.boredom:.2f}"
+            )
+            if silencio:
+                log(f"Silêncio: {motivo}.")
+                time.sleep(INTERVALO_SEGUNDOS)
+                continue
             log(f"Texto observado: {texto_observado[:100]}...")
 
             # Este ciclo passou pelos dois filtros de "pular" (tela/texto idênticos)

@@ -27,6 +27,11 @@ O ciclo do loop principal (`loop_dante.py`) é:
 
 Tudo é logado em `dante.log`.
 
+Os módulos novos em `dante/core/` mantêm snapshots locais de valência e
+homeostase. Ciclos sem mudança de tela ou com OCR idêntico são registrados como
+silêncio; mudanças com texto legível seguem para o pensamento. Os arquivos de
+estado ficam ignorados pelo Git junto com os demais dados locais.
+
 ## Modelos locais
 
 O projeto usa dois papéis de modelo via Ollama:

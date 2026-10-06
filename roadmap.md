@@ -7,9 +7,10 @@ O trabalho novo parte da base estável `origin/main`, mantém Qwen2.5:3b e Llama
 
 - **Fase 1 — Fundação:** pacote `dante/` por domínio, captura/OCR em
   `dante/perception/`, entrada compatível em `dante.loop` e configuração
-  centralizada dos modelos. Em andamento.
+  centralizada dos modelos. Fundação criada; migração do loop segue incremental.
 - **Fase 2 — Valência e silêncio:** estados intrínsecos, homeostase e decisão
-  explícita de silêncio; próxima integração no ciclo contínuo.
+  explícita de silêncio. Módulos integrados ao ciclo para registrar repetição,
+  modular silêncio e persistir os estados locais.
 - **Fase 3 — Auto-modelo:** extração de padrões das entradas do diário e
   atualização periódica do modelo de si.
 - **Fase 4 — Relação e valores:** modelo evolutivo de Otávio e preferências

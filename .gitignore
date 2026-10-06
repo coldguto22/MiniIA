@@ -66,6 +66,8 @@ chroma_db/
 chroma_db.zip
 dante.log
 dante_legado.log
+dante_state.json
+dante_state.json.*
 diario.md
 diario_legado.md
 *_backup.json

@@ -70,6 +70,18 @@ def replenish(state: HomeostasisState, discovery_type: str,
     )
 
 
+def rest(state: HomeostasisState, amount: float = 0.01,
+         *, now: datetime | None = None) -> HomeostasisState:
+    """Recupera energia durante um ciclo passivo sem apagar o tédio acumulado."""
+    return HomeostasisState(
+        energy=state.energy + max(0.0, amount),
+        boredom=state.boredom,
+        stagnation_cycles=state.stagnation_cycles,
+        last_significant=state.last_significant,
+        updated_at=now or datetime.now(timezone.utc),
+    )
+
+
 def should_rest(state: HomeostasisState, threshold: float = 0.2) -> bool:
     return state.energy < threshold
 

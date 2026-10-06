@@ -7,10 +7,12 @@ from dante.core.homeostasis import (
     HomeostasisState,
     decay,
     replenish,
+    rest,
     should_reach_out,
     should_rest,
     should_shift_attention,
 )
+from dante.core.persistence import load_state, save_state
 from dante.core.valence import (
     ValenceState,
     compute_agency,
@@ -49,6 +51,9 @@ def test_homeostasis_decay_replenish_and_thresholds():
     replenished = replenish(state, "discovery")
     assert replenished.energy > state.energy
     assert replenished.stagnation_cycles == 0
+    recovered = rest(state)
+    assert recovered.energy > state.energy
+    assert recovered.boredom == state.boredom
 
 
 @pytest.mark.unit
@@ -66,3 +71,25 @@ def test_silence_reports_clear_reasons_and_detects_repetition():
 def test_relationship_drive_is_only_a_signal():
     old = HomeostasisState(energy=0.8, last_significant=datetime(2026, 1, 1, tzinfo=timezone.utc))
     assert should_reach_out(old, now=datetime(2026, 1, 3, tzinfo=timezone.utc))
+
+
+@pytest.mark.unit
+def test_repeated_identical_observations_remain_silent():
+    valence = ValenceState(novelty=0.0, coherence=0.0)
+    homeostasis = HomeostasisState()
+    silent_cycles = 0
+    for _ in range(10):
+        valence = update_valence(valence, novelty=0, coherence=0)
+        homeostasis = decay(homeostasis)
+        silent, _ = should_be_silent(valence, homeostasis, novelty=0, coherence=0)
+        silent_cycles += int(silent)
+    assert silent_cycles >= 7
+
+
+@pytest.mark.unit
+def test_internal_states_round_trip(tmp_path):
+    path = tmp_path / "state.json"
+    original = ValenceState(pleasure=0.25, novelty=0.7)
+    save_state(path, original)
+    restored = load_state(path, ValenceState, ValenceState)
+    assert restored == original
