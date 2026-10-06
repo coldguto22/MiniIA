@@ -24,6 +24,7 @@ from dante.core.homeostasis import HomeostasisState, decay as decay_homeostasis,
 from dante.core.persistence import load_state, save_state
 from dante.core.self_model import SelfModel, build_self_model
 from dante.core.valence import ValenceState, update_valence
+from dante.cognition.curiosity import compute_curiosity, curiosity_threshold
 from dante.cognition.silence import should_be_silent
 from dante.memory.diary import read_entries
 
@@ -494,9 +495,10 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             # introspectiva do Dante aparece (o pensamento sozinho tende a ser
             # só descrição factual da tela, raramente uma dúvida genuína).
             global ULTIMO_CICLO_PESQUISA
-            if PESQUISA_HABILITADA and (contador_ciclos - ULTIMO_CICLO_PESQUISA) >= CYCLES_ENTRE_PESQUISAS:
+            texto_para_curiosidade = f"{pensamento}\n\nReflexão: {reflexao}" if reflexao else pensamento
+            curiosity_score = compute_curiosity(texto_para_curiosidade, valence)
+            if PESQUISA_HABILITADA and curiosity_score >= curiosity_threshold(valence) and (contador_ciclos - ULTIMO_CICLO_PESQUISA) >= CYCLES_ENTRE_PESQUISAS:
                 log("🔎 Verificando curiosidade...")
-                texto_para_curiosidade = f"{pensamento}\n\nReflexão: {reflexao}" if reflexao else pensamento
                 curioso, query = detectar_curiosidade(texto_para_curiosidade)
                 if curioso and query:
                     log(f"🔍 Curiosidade detectada! Pesquisando: '{query}'")
