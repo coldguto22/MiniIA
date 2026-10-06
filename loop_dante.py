@@ -480,4 +480,6 @@ Dante (em português, primeira pessoa, 3-4 frases):"""
             time.sleep(INTERVALO_SEGUNDOS)
 
 if __name__ == "__main__":
-    main()
+    from dante.loop import main as dante_main
+
+    dante_main()

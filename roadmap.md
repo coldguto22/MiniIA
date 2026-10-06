@@ -1,5 +1,25 @@
 # Roadmap do Projeto Dante (MiniIA)
 
+## Refatoração Dante (em andamento)
+
+O trabalho novo parte da base estável `origin/main`, mantém Qwen2.5:3b e Llama
+3.1:8b via Ollama e não inclui a implementação experimental de Mamba.
+
+- **Fase 1 — Fundação:** pacote `dante/` por domínio, captura/OCR em
+  `dante/perception/`, entrada compatível em `dante.loop` e configuração
+  centralizada dos modelos. Em andamento.
+- **Fase 2 — Valência e silêncio:** estados intrínsecos, homeostase e decisão
+  explícita de silêncio; próxima integração no ciclo contínuo.
+- **Fase 3 — Auto-modelo:** extração de padrões das entradas do diário e
+  atualização periódica do modelo de si.
+- **Fase 4 — Relação e valores:** modelo evolutivo de Otávio e preferências
+  estáveis derivadas da experiência.
+- **Fase 5 — Consolidação:** síntese seletiva, contradições do diário,
+  documentação e validação integrada.
+
+Os estados internos são heurísticas experimentais; nenhum componente usa
+recompensa extrínseca. Consulte [PHILOSOPHY.md](PHILOSOPHY.md).
+
 Este documento organiza as fases do projeto, suas subfases e os itens planejados para o futuro.  
 Ele serve como referência histórica e como guia para as próximas evoluções do sistema.
 
