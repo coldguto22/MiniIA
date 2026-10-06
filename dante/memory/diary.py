@@ -29,7 +29,7 @@ def read_entries(path: str | Path) -> list[str]:
 
 
 def consolidate_old_entries(
-    path: str | Path, *, days_threshold: int = 30, now: datetime | None = None
+    path: str | Path = "diario.md", *, days_threshold: int = 30, now: datetime | None = None
 ) -> str:
     """Resume títulos e conteúdo antigo sem apagar evidência do diário."""
     cutoff = (now or datetime.now()) - timedelta(days=max(0, days_threshold))

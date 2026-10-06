@@ -18,6 +18,9 @@ produzir essa conclusão por prompt.
    terminar sem pensamento ou expressão.
 5. **Mudanças incrementais.** Preservar o OCR, os modelos locais, o ChromaDB,
    `asas.py` e o loop existente enquanto cada módulo é migrado e observado.
+6. **Memória não é descarte silencioso.** A consolidação cria capítulos e pode
+   omitir sinais repetitivos, mas preserva o diário fonte e registra o que foi
+   retido, omitido ou identificado como contradição.
 
 Os valores internos são representações experimentais computáveis. Não são
 evidência de experiência subjetiva. Os estados devem permanecer inspecionáveis,

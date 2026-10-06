@@ -32,6 +32,15 @@ homeostase. Ciclos sem mudança de tela ou com OCR idêntico são registrados co
 silêncio; mudanças com texto legível seguem para o pensamento. Os arquivos de
 estado ficam ignorados pelo Git junto com os demais dados locais.
 
+### Consolidação do diário
+
+Na Fase 5, o diário original permanece intacto. A cada marco configurável de
+entradas, `dante/memory/consolidation.py` seleciona sinais significativos,
+detecta possíveis contradições e grava um capítulo em `diario_capitulos.md`.
+Entradas omitidas do capítulo não são apagadas: o número de retenções e
+omissões fica registrado para inspeção. Um sumarizador Llama pode ser injetado,
+mas existe uma síntese local determinística como fallback.
+
 ## Modelos locais
 
 O projeto usa dois papéis de modelo via Ollama:

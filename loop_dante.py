@@ -31,6 +31,7 @@ from dante.core.values import ValueSystem
 from dante.cognition.curiosity import compute_curiosity, curiosity_threshold
 from dante.cognition.silence import should_be_silent
 from dante.memory.diary import read_entries
+from dante.memory.consolidation import consolidate_diary
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
@@ -52,6 +53,8 @@ RELATIONSHIP_FILE = os.path.join(os.path.dirname(__file__), "relationship_model.
 VALUES_FILE = os.path.join(os.path.dirname(__file__), "values.json")
 SELF_MODEL_MIN_ENTRIES = _RUNTIME_CONFIG["self_model"]["min_diary_entries"]
 SELF_MODEL_EVERY_DAYS = _RUNTIME_CONFIG["self_model"]["regenerate_every_days"]
+CHAPTER_FILE = "diario_capitulos.md"
+CONSOLIDATION_EVERY_ENTRIES = 50
 
 
 def _advance_internal_states(novelty, coherence, *, action_initiated=False):
@@ -115,6 +118,23 @@ def _generate_self_model_patterns(prompt):
     except Exception as exc:
         log(f"Llama indisponível para auto-modelo: {exc}")
         return ""
+
+
+def _consolidate_if_needed(entry_count, last_consolidated_count):
+    """Cria um capítulo separado somente em marcos de volume do diário."""
+    if (
+        entry_count < CONSOLIDATION_EVERY_ENTRIES
+        or entry_count % CONSOLIDATION_EVERY_ENTRIES != 0
+        or entry_count == last_consolidated_count
+    ):
+        return last_consolidated_count
+    result = consolidate_diary(DIARIO_FILE, CHAPTER_FILE)
+    log(
+        "Diário consolidado: "
+        f"{result.retained_entries} retidas, {result.omitted_entries} omitidas, "
+        f"{len(result.contradictions)} contradições observadas."
+    )
+    return entry_count
 
 # --- Configurações do filtro de qualidade de OCR ---
 OCR_MIN_CHARS = 30              # tamanho mínimo bruto para sequer considerar o texto
@@ -456,6 +476,7 @@ def main():
     texto_anterior = None
     self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
     diary_entry_count = len(read_entries(DIARIO_FILE))
+    last_consolidated_count = 0
 
     while True:
         try:
@@ -599,6 +620,9 @@ def main():
                         salvar_na_memoria(f"Diário: {entrada}", "diario")
                     log("Entrada do diário registrada.")
                     self_model, diary_entry_count = _refresh_self_model(self_model, diary_entry_count)
+                    last_consolidated_count = _consolidate_if_needed(
+                        diary_entry_count, last_consolidated_count
+                    )
 
             log(f"Ciclo concluído (processado #{ciclos_processados}). Aguardando {INTERVALO_SEGUNDOS} segundos...\n")
             time.sleep(INTERVALO_SEGUNDOS)

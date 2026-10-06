@@ -15,8 +15,9 @@ O trabalho novo parte da base estável `origin/main`, mantém Qwen2.5:3b e Llama
   atualização periódica do modelo de si.
 - **Fase 4 — Relação e valores:** modelo evolutivo de Otávio e preferências
   estáveis derivadas da experiência.
-- **Fase 5 — Consolidação:** síntese seletiva, contradições do diário,
-  documentação e validação integrada.
+- **Fase 5 — Consolidação:** implementada nesta branch com síntese seletiva,
+  capítulos separados, contradições auditáveis, documentação e validação
+  integrada. O diário original não é apagado.
 
 Os estados internos são heurísticas experimentais; nenhum componente usa
 recompensa extrínseca. Consulte [PHILOSOPHY.md](PHILOSOPHY.md).
