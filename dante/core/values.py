@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from .valence import ValenceState
+
 
 @dataclass
 class ValueSystem:
@@ -40,6 +42,15 @@ class ValueSystem:
         self.value_history.append((value_name, updated, reason))
         self.value_history = self.value_history[-100:]
         self.last_updated = datetime.now(timezone.utc)
+
+    def reinforce_from_valence(self, state: ValenceState) -> None:
+        """Ajusta valores por sinais cognitivos observados no ciclo."""
+        if state.novelty > 0.7:
+            self.reinforce("novidade", 0.02, reason="novidade percebida")
+        if state.coherence > 0.7:
+            self.reinforce("coerência", 0.02, reason="coerência percebida")
+        if state.agency > 0.7:
+            self.reinforce("relação", 0.01, reason="iniciativa própria")
 
 
 def get_value_driven_action(values: ValueSystem, context: dict[str, Any] | None = None) -> str:

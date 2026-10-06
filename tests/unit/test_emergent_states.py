@@ -7,9 +7,10 @@ from dante.core.relationship import (
     RelationshipModel,
     compute_connection_drive,
     should_initiate_contact,
+    update_connection_drive,
     update_from_interaction,
 )
-from dante.core.self_model import SelfModel, build_self_model
+from dante.core.self_model import SelfModel, build_self_model, regenerate_if_needed
 from dante.core.values import ValueSystem, get_value_driven_action
 from dante.memory.diary import find_contradictions
 
@@ -35,6 +36,29 @@ def test_empty_diary_preserves_existing_self_model():
 
 
 @pytest.mark.unit
+def test_self_model_can_regenerate_from_model_json_after_threshold():
+    previous = SelfModel(
+        version=2,
+        generated_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    entries = [f"Entrada sobre consciência e memória {index}" for index in range(20)]
+
+    updated = regenerate_if_needed(
+        entries,
+        previous,
+        last_entry_count=0,
+        generate=lambda _: '{"preferences": ["conectar ideias"], "aversions": [], "recurring_themes": ["consciência"], "goals": ["observar"]}',
+        now=datetime(2026, 1, 10, tzinfo=timezone.utc),
+        every_days=7,
+        min_entries=20,
+    )
+
+    assert updated.version == 3
+    assert updated.preferences == ["conectar ideias"]
+    assert updated.recurring_themes == ["consciência"]
+
+
+@pytest.mark.unit
 def test_relationship_drive_and_interaction_reset():
     model = RelationshipModel(connection_drive=compute_connection_drive(20))
     assert should_initiate_contact(model, HomeostasisState(energy=0.8))
@@ -45,6 +69,18 @@ def test_relationship_drive_and_interaction_reset():
     )
     assert updated.connection_drive == 0
     assert updated.recent_topics == ["consciência"]
+
+
+@pytest.mark.unit
+def test_relationship_drive_grows_with_elapsed_time():
+    model = RelationshipModel(
+        last_interaction=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    updated = update_connection_drive(
+        model,
+        now=datetime(2026, 1, 2, tzinfo=timezone.utc),
+    )
+    assert updated.connection_drive == pytest.approx(0.96)
 
 
 @pytest.mark.unit

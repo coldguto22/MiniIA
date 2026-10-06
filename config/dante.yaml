@@ -1,0 +1,15 @@
+valence:
+  decay_rate: 0.05
+homeostasis:
+  energy_decay_per_cycle: 0.01
+  boredom_growth_per_cycle: 0.02
+silence:
+  min_novelty: 0.1
+  min_coherence: 0.2
+  min_energy: 0.2
+  similarity_threshold: 0.9
+self_model:
+  regenerate_every_days: 7
+  min_diary_entries: 20
+relationship:
+  connection_drive_growth_per_hour: 0.04

@@ -15,6 +15,8 @@ from dante.core.values import ValueSystem
 def test_loop_persiste_valencia_e_homeostase_em_ciclos(tmp_path, monkeypatch):
     state_path = str(tmp_path / "dante_state.json")
     monkeypatch.setattr(loop_dante, "ESTADO_FILE", state_path)
+    monkeypatch.setattr(loop_dante, "VALUES_FILE", str(tmp_path / "values.json"))
+    monkeypatch.setattr(loop_dante, "RELATIONSHIP_FILE", str(tmp_path / "relationship.json"))
 
     first_valence, first_homeostasis = loop_dante._advance_internal_states(0.8, 0.7)
     second_valence, second_homeostasis = loop_dante._advance_internal_states(0.0, 0.0)
