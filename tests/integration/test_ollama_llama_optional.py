@@ -16,7 +16,11 @@ def _has_model(model_name: str) -> bool:
         models = getattr(response, "models", [])
     names = set()
     for item in models:
-        name = item.get("name") if isinstance(item, dict) else getattr(item, "name", None)
+        name = (
+            item.get("name")
+            if isinstance(item, dict)
+            else getattr(item, "model", getattr(item, "name", None))
+        )
         if name:
             names.add(str(name))
     return model_name in names
