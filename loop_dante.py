@@ -12,6 +12,7 @@ import re
 import sys
 from datetime import datetime
 from difflib import SequenceMatcher
+from pathlib import Path
 
 # --- Integração com os módulos do projeto ---
 import chromadb
@@ -25,6 +26,7 @@ from dante.core.homeostasis import HomeostasisState, decay as decay_homeostasis,
 from dante.core.persistence import load_state, save_state
 from dante.core.relationship import RelationshipModel, update_connection_drive
 from dante.core.self_model import SelfModel, build_self_model, regenerate_if_needed
+from dante.core.text import normalize_text
 from dante.core.valence import ValenceState, compute_agency, update_valence
 from dante.core.values import ValueSystem
 from dante.cognition.curiosity import compute_curiosity, curiosity_threshold
@@ -47,10 +49,11 @@ MODELO_OBSERVACAO = _MODEL_CONFIG["system1"]["model"]
 MODELO_DIARIO = _MODEL_CONFIG["system2"]["model"]
 LOG_FILE = "dante.log"
 DIARIO_FILE = "diario.md"
-ESTADO_FILE = os.path.join(os.path.dirname(__file__), "dante_state.json")
-SELF_MODEL_FILE = os.path.join(os.path.dirname(__file__), "self_model.json")
-RELATIONSHIP_FILE = os.path.join(os.path.dirname(__file__), "relationship_model.json")
-VALUES_FILE = os.path.join(os.path.dirname(__file__), "values.json")
+RUNTIME_DIR = Path(__file__).resolve().parent / ".dante_state"
+ESTADO_FILE = str(RUNTIME_DIR / "dante_state.json")
+SELF_MODEL_FILE = str(RUNTIME_DIR / "self_model.json")
+RELATIONSHIP_FILE = str(RUNTIME_DIR / "relationship_model.json")
+VALUES_FILE = str(RUNTIME_DIR / "values.json")
 SELF_MODEL_MIN_ENTRIES = _RUNTIME_CONFIG["self_model"]["min_diary_entries"]
 SELF_MODEL_EVERY_DAYS = _RUNTIME_CONFIG["self_model"]["regenerate_every_days"]
 CHAPTER_FILE = "diario_capitulos.md"
@@ -169,6 +172,7 @@ def log(mensagem):
         f.write(linha + "\n")
 
 def gerar_embedding(texto):
+    texto = normalize_text(texto, max_chars=MAX_CHARS_EMBEDDING)
     resp = ollama.embeddings(model="nomic-embed-text", prompt=texto)
     emb = np.array(resp["embedding"])
     emb = emb / (np.linalg.norm(emb) + 1e-10)
@@ -227,7 +231,7 @@ def tela_mudou(hash_anterior):
 def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOLD_SIMILARIDADE):
     if colecao is None:
         return []
-    emb = gerar_embedding(texto)
+    emb = gerar_embedding(normalize_text(texto, max_chars=MAX_CHARS_EMBEDDING))
     resultados = colecao.query(
         query_embeddings=[emb],
         n_results=top_n,
@@ -494,8 +498,7 @@ def main():
 
             # 2. Capturar texto da tela (OCR)
             log("Tela mudou. Extraindo texto...")
-            texto_observado = capture_and_extract_text()
-            texto_observado = texto_observado[:500] if len(texto_observado) > 500 else texto_observado
+            texto_observado = normalize_text(capture_and_extract_text(), max_chars=500)
 
             # NOVO: Filtro de similaridade de texto (hash MD5)
             texto_hash = hashlib.md5(texto_observado.encode('utf-8')).hexdigest()
@@ -548,7 +551,7 @@ def main():
 
             # 3. Gerar pensamento
             log("Gerando pensamento...")
-            pensamento = gerar_pensamento(texto_observado)
+            pensamento = normalize_text(gerar_pensamento(texto_observado), max_chars=1200)
             log(f"Pensamento: {pensamento[:100]}...")
 
             # 4. Buscar memórias relacionadas

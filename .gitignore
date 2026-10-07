@@ -70,6 +70,11 @@ dante.log
 dante_legado.log
 dante_state.json
 dante_state.json.*
+.dante_state/
+diario_capitulos.md
+relationship_model.json
+values.json
+self_model.json
 diario.md
 diario_legado.md
 *_backup.json
