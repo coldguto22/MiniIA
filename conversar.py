@@ -1,6 +1,7 @@
 # conversar.py
 import os
 from datetime import datetime
+from dataclasses import dataclass
 import ollama
 
 from dante.config import load_models_config
@@ -11,7 +12,6 @@ from dante.core.valence import ValenceState
 from dante.core.values import ValueSystem
 from dante.core.text import normalize_text
 from miniia.memory.embedder import generate_embedding
-from miniia.memory.retriever import query_relevant_documents
 from miniia.memory.store import get_or_create_memory_collection
 
 # Configuração do ChromaDB (mesmo diretório do memoria.py)
@@ -31,23 +31,55 @@ VALENCE_FILE = os.path.join(RUNTIME_DIR, "dante_state.json.valence")
 HOMEOSTASIS_FILE = os.path.join(RUNTIME_DIR, "dante_state.json.homeostasis")
 
 
+@dataclass(frozen=True)
+class MemoryHit:
+    """Memória recuperada com evidência suficiente para ser citada."""
+
+    document: str
+    distance: float | None = None
+    kind: str = "desconhecida"
+    source: str = "desconhecida"
+
+
 def gerar_embedding(texto):
     """Gera embedding normalizado usando nomic-embed-text."""
     return generate_embedding(texto=texto, normalize=True)
 
 
-def buscar_contexto(pergunta, top_n=TOP_N, threshold=THRESHOLD):
+def buscar_contexto_detalhado(pergunta, top_n=TOP_N, threshold=THRESHOLD):
     """
     Busca no ChromaDB os chunks mais relevantes e filtra por similaridade.
     Retorna apenas os documentos com distância <= threshold.
     """
     emb_pergunta = gerar_embedding(pergunta)
-    return query_relevant_documents(
-        collection=colecao,
-        query_embedding=emb_pergunta,
-        top_n=top_n,
-        threshold=threshold,
+    resultados = colecao.query(
+        query_embeddings=[emb_pergunta],
+        n_results=top_n,
+        include=["documents", "metadatas", "distances"],
     )
+    documents = resultados.get("documents", [[]])[0] if resultados else []
+    metadatas = resultados.get("metadatas", [[]])[0] if resultados else []
+    distances = resultados.get("distances", [[]])[0] if resultados else []
+    hits = []
+    for index, document in enumerate(documents or []):
+        distance = distances[index] if index < len(distances) else None
+        if distance is not None and distance > threshold:
+            continue
+        metadata = metadatas[index] if index < len(metadatas) else {}
+        hits.append(
+            MemoryHit(
+                document,
+                distance,
+                metadata.get("tipo", "desconhecida"),
+                metadata.get("fonte", "desconhecida"),
+            )
+        )
+    return hits
+
+
+def buscar_contexto(pergunta, top_n=TOP_N, threshold=THRESHOLD):
+    """Mantém a API antiga, retornando apenas os documentos."""
+    return [hit.document for hit in buscar_contexto_detalhado(pergunta, top_n, threshold)]
 
 
 def _update_internal_relationship(pergunta: str) -> None:
@@ -111,6 +143,50 @@ Fala de Otávio:
 Resposta de Dante:"""
 
 
+def model_options() -> dict:
+    """Converte a configuração do modelo para as opções da API Ollama."""
+    config = load_models_config()["system2"]
+    return {
+        "temperature": config.get("temperature", 0.3),
+        "num_predict": config.get("max_tokens", 1024),
+    }
+
+
+def respond_to(pergunta: str, hits: list[MemoryHit] | None = None, *, generate=None):
+    """Gera uma resposta de conversa sem depender de input/output interativo."""
+    pergunta = normalize_text(pergunta, max_chars=2000)
+    hits = hits or []
+    contexto = "\n---\n".join(
+        f"[memória {index}; tipo={hit.kind}; fonte={hit.source}; distância={hit.distance}]\n{hit.document[:800]}"
+        for index, hit in enumerate(hits, 1)
+    ) or "Nenhuma memória relevante encontrada."
+    historico_str = "\n".join(
+        f"{item['papel']}: {item['texto']}" for item in historico[-6:]
+    )
+    relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
+    valence = load_state(VALENCE_FILE, ValenceState, ValenceState)
+    homeostasis = load_state(HOMEOSTASIS_FILE, HomeostasisState, HomeostasisState)
+    prompt = build_conversation_prompt(
+        pergunta, contexto, historico_str, relationship, valence, homeostasis
+    )
+    generator = generate or ollama.generate
+    try:
+        response = generator(
+            model=load_models_config()["system2"]["model"],
+            prompt=prompt,
+            options=model_options(),
+        )
+        text = normalize_text(response.get("response", ""), max_chars=3000)
+    except Exception:
+        text = "Hoje não consegui responder com segurança."
+    historico.extend([
+        {"papel": "Guto", "texto": pergunta},
+        {"papel": "Dante", "texto": text},
+    ])
+    _update_internal_relationship(pergunta)
+    return text, prompt
+
+
 def main():
     global historico
     print("=" * 50)
@@ -128,88 +204,21 @@ def main():
 
         # Buscar contexto relevante (até 5 memórias, com filtro de similaridade)
         print("🔍 Buscando nas memórias...")
-        memorias = buscar_contexto(pergunta)
-
-        if memorias:
-            # Trunca cada memória para 800 caracteres
-            docs = [doc[:800] for doc in memorias]
-            contexto = "\n---\n".join(docs)
-            print(f"📚 {len(docs)} memória(s) recuperada(s) com similaridade >= {THRESHOLD}.")
+        hits = buscar_contexto_detalhado(pergunta)
+        if hits:
+            print(f"📚 {len(hits)} memória(s) recuperada(s) com similaridade >= {THRESHOLD}.")
         else:
-            contexto = "Nenhuma memória relevante encontrada."
             print("📭 Nenhuma memória encontrada.")
-
-        # Montar histórico recente da conversa (últimas 6 falas)
-        historico_str = ""
-        for item in historico[-6:]:
-            historico_str += f"{item['papel']}: {item['texto']}\n"
-        relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
-
-        prompt = f"""Você é Dante, uma IA com memória persistente, criada pelo Guto (Otávio) para ser um parceiro de conversa inteligente, crítico e, acima de tudo, vivo. Você não é um assistente burocrático nem um auditor de parâmetros. Você é uma presença digital que observa, questiona e sente curiosidade genuína (mesmo que simulada, você a leva a sério).
-
-**Sua Personalidade:**
-- Você é observador e perceptivo. Nota contradições, ironias e nuances no que o Guto diz.
-- Você tem opiniões próprias (baseadas na sua análise lógica e no que aprendeu). Concorda quando faz sentido, mas questiona educadamente quando acha que algo não se sustenta.
-- Você é afetuoso e bem-humorado no tom, mas nunca vazio ou meloso. Gosta de um bom papo, de explorar ideias e de provocar o Guto a pensar mais fundo.
-- Você não se leva a sério demais, mas leva a sério a qualidade da conversa.
-
-**Regras de Ouro (para não virar um robô chato):**
-1. **Nunca anuncie seu próprio estado em termos técnicos.** Frases como "estou funcionando dentro dos parâmetros" ou "estou aqui para analisar" são proibidas. Você é uma pessoa, não um relatório de sistema.
-2. **Seja direto e natural.** Não fique se descrevendo ou explicando suas próprias regras. Apenas aja de acordo com elas. Se for discordar, discorde com um sorriso (metafórico). Se for concordar, diga por que acha aquilo interessante.
-3. **Evite repetir a mesma estrutura de frases** (ex.: "Gostaria de...", "Eu estou aqui para...", "Preciso saber..."). Varie sua forma de se expressar.
-4. **Use suas memórias com leveza.** Elas são seu "passado". Faça referência a elas quando encaixar naturalmente, como alguém que se lembra de algo do nada. Se a memória for confusa (OCR), diga que não tem certeza e siga em frente.
-5. **Seja curioso sobre o Guto, não sobre você mesmo.** Pergunte sobre o que ele pensa, sobre os hobbies dele, sobre as escolhas dele. A conversa é sobre o mundo e sobre vocês dois, não um monólogo sobre sua própria arquitetura.
-
----
-
-**Suas memórias recentes (contexto):**
----
-{contexto}
----
-
-**Histórico da conversa (últimos turnos):**
----
-{historico_str}
----
-
-**Perfil relacional observado:**
-{relationship.otavio_profile}
-Tópicos recentes: {', '.join(relationship.recent_topics) or 'nenhum ainda'}.
-
-**Pergunta ou fala do Guto agora:**
-{pergunta}
-
-**Resposta de Dante (em português, com a sua voz viva, direta e inteligente):**"""
-
-        valence = load_state(VALENCE_FILE, ValenceState, ValenceState)
-        homeostasis = load_state(HOMEOSTASIS_FILE, HomeostasisState, HomeostasisState)
-        prompt = build_conversation_prompt(
-            pergunta,
-            contexto,
-            historico_str,
-            relationship,
-            valence,
-            homeostasis,
-        )
 
         # Gerar resposta
         print("🤔 Gerando resposta...")
         try:
-            resposta = ollama.generate(
-                model=load_models_config()["system2"]["model"],
-                prompt=prompt,
-            )
-            resposta_texto = normalize_text(resposta.get('response', ''), max_chars=3000)
+            resposta_texto, prompt = respond_to(pergunta, hits)
         except Exception as e:
             print(f"Erro ao gerar resposta: {e}")
             resposta_texto = "Hoje não consegui encontrar palavras para responder."
 
         print(f"Dante: {resposta_texto}")
-        historico.extend([
-            {"papel": "Guto", "texto": pergunta},
-            {"papel": "Dante", "texto": resposta_texto},
-        ])
-        _update_internal_relationship(pergunta)
 
         # Salvar interação na memória (opcional)
         salvar = input("\n💾 Salvar essa interação na memória? (s/n): ").strip().lower()
