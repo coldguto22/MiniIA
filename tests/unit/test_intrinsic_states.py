@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from dante.cognition.silence import should_be_silent
+from dante.cognition.silence import observation_is_repeated, should_be_silent
 from dante.core.homeostasis import (
     HomeostasisState,
     decay,
@@ -84,6 +84,12 @@ def test_repeated_identical_observations_remain_silent():
         silent, _ = should_be_silent(valence, homeostasis, novelty=0, coherence=0)
         silent_cycles += int(silent)
     assert silent_cycles >= 7
+
+
+@pytest.mark.unit
+def test_near_identical_ocr_is_treated_as_repetition():
+    assert observation_is_repeated("janela Dante ciclo 10", "janela Dante ciclo 10!!!")
+    assert not observation_is_repeated("janela Dante", "uma tela completamente diferente")
 
 
 @pytest.mark.unit

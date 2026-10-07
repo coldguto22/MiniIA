@@ -30,7 +30,8 @@ from dante.core.text import normalize_text
 from dante.core.valence import ValenceState, compute_agency, update_valence
 from dante.core.values import ValueSystem
 from dante.cognition.curiosity import compute_curiosity, curiosity_threshold
-from dante.cognition.silence import should_be_silent
+from dante.cognition.silence import observation_is_repeated, should_be_silent
+from dante.core.homeostasis import should_shift_attention
 from dante.memory.diary import read_entries
 from dante.memory.consolidation import consolidate_diary
 from dante.perception.ocr import capture_and_extract_text
@@ -514,6 +515,11 @@ def main():
                 1.0 if texto_anterior is None else
                 1.0 - SequenceMatcher(None, texto_anterior.casefold(), texto_observado.casefold()).ratio()
             )
+            if observation_is_repeated(texto_anterior or "", texto_observado):
+                valence, homeostasis = _advance_internal_states(0.0, 0.0)
+                log("Silêncio: repeticao_observacao. OCR praticamente inalterado.")
+                time.sleep(INTERVALO_SEGUNDOS)
+                continue
             texto_anterior = texto_observado
 
             # Filtro de qualidade: se for basicamente lixo (curto, sem letras
@@ -541,6 +547,10 @@ def main():
             )
             if silencio:
                 log(f"Silêncio: {motivo}.")
+                time.sleep(INTERVALO_SEGUNDOS)
+                continue
+            if should_shift_attention(homeostasis) and novidade_estimada < 0.5:
+                log("Silêncio: tedio_alto. A atenção precisa mudar antes de observar novamente.")
                 time.sleep(INTERVALO_SEGUNDOS)
                 continue
             log(f"Texto observado: {texto_observado[:100]}...")
