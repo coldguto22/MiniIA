@@ -38,7 +38,6 @@ from dante.perception.ocr import capture_and_extract_text
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
-CYCLES_PARA_DIARIO = 5
 THRESHOLD_SIMILARIDADE = 0.7
 TOP_N_MEMORIAS = 5
 MAX_CHARS_EMBEDDING = 4000
@@ -57,6 +56,8 @@ RELATIONSHIP_FILE = str(RUNTIME_DIR / "relationship_model.json")
 VALUES_FILE = str(RUNTIME_DIR / "values.json")
 SELF_MODEL_MIN_ENTRIES = _RUNTIME_CONFIG["self_model"]["min_diary_entries"]
 SELF_MODEL_EVERY_DAYS = _RUNTIME_CONFIG["self_model"]["regenerate_every_days"]
+DIARY_ENERGY_THRESHOLD = _RUNTIME_CONFIG["diary"]["write_when_energy_below"]
+DIARY_FORCE_EVERY = _RUNTIME_CONFIG["diary"]["force_every_n_cycles"]
 CHAPTER_FILE = "diario_capitulos.md"
 CONSOLIDATION_EVERY_ENTRIES = 50
 
@@ -122,6 +123,11 @@ def _generate_self_model_patterns(prompt):
     except Exception as exc:
         log(f"Llama indisponível para auto-modelo: {exc}")
         return ""
+
+
+def should_write_diary(homeostasis, cycles_since_diary):
+    """Escreve durante baixa energia ou em um marco espaçado."""
+    return homeostasis.energy < DIARY_ENERGY_THRESHOLD or cycles_since_diary >= DIARY_FORCE_EVERY
 
 
 def _consolidate_if_needed(entry_count, last_consolidated_count):
@@ -253,10 +259,10 @@ def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOL
             memorias.append(doc)
     return memorias
 
-def gerar_reflexao(pensamento_atual, memorias):
+def gerar_reflexao(pensamento_atual, memorias, valence=None):
     self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
     try:
-        return generate_reflection_adapter(pensamento_atual, memorias, self_model)
+        return generate_reflection_adapter(pensamento_atual, memorias, self_model, valence=valence)
     except Exception as e:
         log(f"Erro ao gerar reflexão pelo adaptador: {e}")
         return _gerar_reflexao_legado(pensamento_atual, memorias)
@@ -290,20 +296,20 @@ Dante (em português, 1-2 frases):"""
         log(f"Erro ao gerar reflexão: {e}")
         return ""
 
-def gerar_reflexao_sem_contexto(pensamento_atual):
+def gerar_reflexao_sem_contexto(pensamento_atual, valence=None):
     self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
     try:
-        return generate_reflection_adapter(pensamento_atual, [], self_model)
+        return generate_reflection_adapter(pensamento_atual, [], self_model, valence=valence)
     except Exception as e:
         log(f"Erro ao gerar reflexão sem contexto pelo adaptador: {e}")
         return _gerar_reflexao_sem_contexto_legado(pensamento_atual)
 
 
-def gerar_pensamento(texto_observado):
+def gerar_pensamento(texto_observado, valence=None):
     """Gera pensamento via adaptador Qwen, com fallback textual mínimo."""
     self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
     try:
-        pensamento = generate_thought_adapter(texto_observado, self_model)
+        pensamento = generate_thought_adapter(texto_observado, self_model, valence=valence)
     except Exception as e:
         log(f"Erro ao gerar pensamento pelo adaptador: {e}")
         pensamento = ""
@@ -347,6 +353,10 @@ Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
         log("Segunda tentativa também recusada. Usando fallback padrão para o diário.")
         entrada = "Hoje observei em silêncio."
 
+    if parece_deriva_de_papel(entrada):
+        log("Deriva de papel detectada na entrada de diário. Registrando silêncio.")
+        entrada = "Hoje observei em silêncio."
+
     return entrada
 
 def _tentar_gerar_diario(prompt):
@@ -382,6 +392,20 @@ def parece_recusa(texto):
         return True
     texto_lower = texto.strip().lower()
     return any(padrao in texto_lower for padrao in PADROES_RECUSA)
+
+
+def parece_deriva_de_papel(texto):
+    """Detecta identidade reduzida a assistente, utilidade ou recompensa."""
+    texto_lower = (texto or "").casefold()
+    padroes = (
+        "sistema de recompensa",
+        "sou um assistente",
+        "como assistente,",
+        "meu propósito é ajudar",
+        "servir à comunidade",
+        "pronto para ajudar",
+    )
+    return any(padrao in texto_lower for padrao in padroes)
 
 def salvar_na_memoria(documento, tipo, usar_embedding=True):
     if colecao is None:
@@ -478,6 +502,7 @@ def main():
     hash_texto_anterior = None    # NOVO: hash do texto extraído
     contador_ciclos = 0           # total de voltas do loop (inclui ciclos pulados)
     ciclos_processados = 0        # ciclos que de fato geraram pensamento/reflexão
+    ciclos_desde_diario = 0
     texto_anterior = None
     self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
     diary_entry_count = len(read_entries(DIARIO_FILE))
@@ -558,10 +583,11 @@ def main():
             # Este ciclo passou pelos dois filtros de "pular" (tela/texto idênticos)
             # e vai gerar pensamento de verdade — conta como ciclo processado.
             ciclos_processados += 1
+            ciclos_desde_diario += 1
 
             # 3. Gerar pensamento
             log("Gerando pensamento...")
-            pensamento = normalize_text(gerar_pensamento(texto_observado), max_chars=1200)
+            pensamento = normalize_text(gerar_pensamento(texto_observado, valence), max_chars=1200)
             log(f"Pensamento: {pensamento[:100]}...")
 
             # 4. Buscar memórias relacionadas
@@ -574,10 +600,10 @@ def main():
             # 5. Reflexão conectada ou fallback
             reflexao = ""
             if memorias:
-                reflexao = gerar_reflexao(pensamento, memorias)
+                reflexao = gerar_reflexao(pensamento, memorias, valence)
                 log(f"Reflexão: {reflexao[:100]}...")
             else:
-                reflexao = gerar_reflexao_sem_contexto(pensamento)
+                reflexao = gerar_reflexao_sem_contexto(pensamento, valence)
                 log(f"Reflexão (sem contexto): {reflexao[:100]}...")
 
             # 5.5. Pesquisa autônoma (Fase 4 - Asas)
@@ -620,10 +646,8 @@ def main():
             else:
                 log("Texto ilegível — pulando salvamento no ChromaDB.")
 
-            # 7. Diário a cada CYCLES_PARA_DIARIO ciclos efetivamente processados
-            # (usa ciclos_processados, não contador_ciclos, para não depender de
-            # coincidência com ciclos pulados por tela/texto estático)
-            if ciclos_processados % CYCLES_PARA_DIARIO == 0:
+            # Diário em baixa energia ou em marco espaçado, não em cadência fixa.
+            if should_write_diary(homeostasis, ciclos_desde_diario):
                 log("Gerando entrada do diário...")
                 entrada = gerar_entrada_diario(pensamento, reflexao)
                 if entrada:
@@ -632,6 +656,7 @@ def main():
                     if not pular_salvamento:
                         salvar_na_memoria(f"Diário: {entrada}", "diario")
                     log("Entrada do diário registrada.")
+                    ciclos_desde_diario = 0
                     self_model, diary_entry_count = _refresh_self_model(self_model, diary_entry_count)
                     last_consolidated_count = _consolidate_if_needed(
                         diary_entry_count, last_consolidated_count

@@ -41,6 +41,7 @@ DEFAULT_RUNTIME_CONFIG: dict[str, Any] = {
     },
     "self_model": {"regenerate_every_days": 7, "min_diary_entries": 20},
     "relationship": {"connection_drive_growth_per_hour": 0.04},
+    "diary": {"write_when_energy_below": 0.3, "force_every_n_cycles": 20},
 }
 
 
