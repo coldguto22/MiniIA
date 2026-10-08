@@ -59,6 +59,18 @@ SELF_MODEL_EVERY_DAYS = _RUNTIME_CONFIG["self_model"]["regenerate_every_days"]
 DIARY_ENERGY_THRESHOLD = _RUNTIME_CONFIG["diary"]["write_when_energy_below"]
 DIARY_FORCE_EVERY = _RUNTIME_CONFIG["diary"]["force_every_n_cycles"]
 CHAPTER_FILE = "diario_capitulos.md"
+FONTES_FUNDACIONAIS = (
+    "conversa_sobre_ser",
+    "identidade_dante",
+    "manifesto_dante",
+    "memoria_do_criador",
+    "anti_assistente",
+    "anti_assistente_v2",
+    "genese_asimov",             # NOVO — aparece na auditoria, está órfão
+    "entropia_e_memoria",        # NOVO
+    "paradoxo_auto_observacao",  # NOVO
+)
+TIPOS_FUNDACIONAIS = ("conhecimento_fundacional", "conhecimento_pessoal")
 CONSOLIDATION_EVERY_ENTRIES = 50
 
 
@@ -92,13 +104,15 @@ def _advance_internal_states(novelty, coherence, *, action_initiated=False):
     return valence, homeostasis
 
 
-def _refresh_self_model(current, entry_count):
+def _refresh_self_model(current, entry_count, foundational_memories=None):
     """Atualiza o auto-modelo apenas quando o diário ganhou uma entrada."""
     entries = read_entries(DIARIO_FILE)
     if len(entries) <= entry_count:
         return current, entry_count
+    if foundational_memories is None:
+        foundational_memories = carregar_memorias_fundacionais()
     if current.version == 0:
-        updated = build_self_model(entries, current)
+        updated = build_self_model(entries, current, foundational_memories=foundational_memories)
     else:
         updated = regenerate_if_needed(
             entries,
@@ -107,6 +121,7 @@ def _refresh_self_model(current, entry_count):
             generate=_generate_self_model_patterns,
             every_days=SELF_MODEL_EVERY_DAYS,
             min_entries=SELF_MODEL_MIN_ENTRIES,
+            foundational_memories=foundational_memories,
         )
     if updated is current:
         return current, len(entries)
@@ -224,7 +239,15 @@ def tela_mudou(hash_anterior):
     from PIL import Image
     try:
         with mss.MSS() as sct:
-            screenshot = sct.grab(sct.monitors[1])
+            monitor = sct.monitors[1]
+            # Ignora os últimos 60px (taskbar típica)
+            regiao = {
+                "left": monitor["left"],
+                "top": monitor["top"],
+                "width": monitor["width"],
+                "height": max(100, monitor["height"] - 60),
+            }
+            screenshot = sct.grab(regiao)
             img = Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
             raw_bytes = img.tobytes()
             hash_atual = hashlib.md5(raw_bytes).hexdigest()
@@ -407,18 +430,60 @@ def parece_deriva_de_papel(texto):
     )
     return any(padrao in texto_lower for padrao in padroes)
 
-def salvar_na_memoria(documento, tipo, usar_embedding=True):
+def salvar_na_memoria(documento, tipo, usar_embedding=True,
+                      fonte="loop_passivo", dedup_threshold=0.92):
+    """Grava uma memória, deduplicando contra as existentes do mesmo tipo.
+
+    Se uma memória suficientemente similar já existir, incrementa um contador
+    de repetições nela em vez de criar uma nova entrada. Isso impede que o
+    loop passivo polua o banco com ecos da mesma observação.
+    """
     if colecao is None:
         return
+
     timestamp = datetime.now().isoformat()
     doc_truncado = documento[:MAX_CHARS_EMBEDDING] if len(documento) > MAX_CHARS_EMBEDDING else documento
+    embedding = gerar_embedding(doc_truncado) if usar_embedding else None
+
+    # --- Deduplicação ---
+    if embedding is not None:
+        try:
+            candidatos = colecao.query(
+                query_embeddings=[embedding],
+                n_results=3,
+                include=["metadatas", "distances"],
+            )
+            dists = (candidatos.get("distances") or [[]])[0]
+            ids_cand = (candidatos.get("ids") or [[]])[0]
+            metas_cand = (candidatos.get("metadatas") or [[]])[0]
+            if dists and ids_cand and metas_cand:
+                similaridade = 1.0 - dists[0]  # cosine distance → similarity
+                if similaridade >= dedup_threshold:
+                    id_existente = ids_cand[0]
+                    meta = dict(metas_cand[0] or {})
+                    meta["repeticoes"] = int(meta.get("repeticoes", 1)) + 1
+                    meta["ultima_repeticao"] = timestamp
+                    colecao.update(ids=[id_existente], metadatas=[meta])
+                    log(f"[dedup] Similar={similaridade:.3f} — incrementando contador (total={meta['repeticoes']}).")
+                    return
+        except Exception as e:
+            log(f"[dedup] Falha ao consultar duplicatas: {e}. Gravando mesmo assim.")
+
+    # --- Gravação nova ---
+    metadados = {
+        "timestamp": timestamp,
+        "tipo": tipo,
+        "fonte": fonte,
+        "truncado": len(documento) > MAX_CHARS_EMBEDDING,
+        "repeticoes": 1,
+    }
     dados = {
         "documents": [doc_truncado],
-        "metadatas": [{"timestamp": timestamp, "tipo": tipo, "truncado": len(documento) > MAX_CHARS_EMBEDDING}],
-        "ids": [f"{tipo}_{timestamp}"]
+        "metadatas": [metadados],
+        "ids": [f"{tipo}_{timestamp}"],
     }
-    if usar_embedding:
-        dados["embeddings"] = [gerar_embedding(doc_truncado)]
+    if embedding is not None:
+        dados["embeddings"] = [embedding]
     colecao.add(**dados)
 
 def detectar_curiosidade(texto):
@@ -474,6 +539,24 @@ Decisão:"""
         log(f"Erro ao detectar curiosidade: {e}")
         return False, ""
 
+def carregar_memorias_fundacionais(limit=6):
+    """Recupera as memórias que constituem o 'eu' de Dante, por metadado."""
+    if colecao is None:
+        return []
+    try:
+        resultado = colecao.get(
+            where={"$or": [
+                {"fonte": {"$in": list(FONTES_FUNDACIONAIS)}},
+                {"tipo": {"$in": list(TIPOS_FUNDACIONAIS)}},
+            ]},
+            limit=limit,
+            include=["documents", "metadatas"],
+        )
+        return list(resultado.get("documents", []) or [])
+    except Exception as e:
+        log(f"Falha ao carregar memórias fundacionais: {e}")
+        return []
+    
 def pesquisar_e_aprender(query):
     """Realiza a busca e gera um aprendizado com o Llama 3.1."""
     import asas
@@ -507,6 +590,16 @@ def main():
     self_model = load_state(SELF_MODEL_FILE, SelfModel, SelfModel)
     diary_entry_count = len(read_entries(DIARIO_FILE))
     last_consolidated_count = 0
+    # Carrega a identidade fundacional uma vez; ela é o substrato do auto-modelo.
+    memorias_fundacionais = carregar_memorias_fundacionais()
+    if self_model.version == 0 and memorias_fundacionais:
+        self_model = build_self_model(
+            read_entries(DIARIO_FILE),
+            self_model,
+            foundational_memories=memorias_fundacionais,
+        )
+        save_state(SELF_MODEL_FILE, self_model)
+        log(f"Auto-modelo inicial ancorado em {len(memorias_fundacionais)} memórias fundacionais.")
 
     while True:
         try:
@@ -624,7 +717,8 @@ def main():
                         # Salva o aprendizado na memória
                         salvar_na_memoria(
                             f"Pesquisa: {query}\nAprendizado: {aprendizado}",
-                            "pesquisa_autonoma"
+                            "pesquisa_autonoma",
+                            fonte="pesquisa_autonoma"
                         )
                         # Registra no diário imediatamente
                         with open(DIARIO_FILE, "a", encoding="utf-8") as f:
@@ -639,10 +733,10 @@ def main():
             # 6. Salvar pensamento e reflexão na memória (apenas se o texto não for lixo)
             if not pular_salvamento:
                 doc_pensamento = f"Observação: {texto_observado}\nPensamento: {pensamento}"
-                salvar_na_memoria(doc_pensamento, "observacao_passiva")
+                salvar_na_memoria(doc_pensamento, "observacao_passiva", fonte="loop_passivo")
                 if reflexao:
                     doc_reflexao = f"Reflexão: {reflexao}\n(Baseado em: {pensamento})"
-                    salvar_na_memoria(doc_reflexao, "reflexao")
+                    salvar_na_memoria(doc_reflexao, "reflexao", fonte="loop_passivo")
             else:
                 log("Texto ilegível — pulando salvamento no ChromaDB.")
 
@@ -654,10 +748,12 @@ def main():
                     with open(DIARIO_FILE, "a", encoding="utf-8") as f:
                         f.write(f"\n### {datetime.now().strftime('%d/%m/%Y %H:%M')}\n{entrada}\n")
                     if not pular_salvamento:
-                        salvar_na_memoria(f"Diário: {entrada}", "diario")
+                        salvar_na_memoria(f"Diário: {entrada}", "diario", fonte="loop_passivo")
                     log("Entrada do diário registrada.")
                     ciclos_desde_diario = 0
-                    self_model, diary_entry_count = _refresh_self_model(self_model, diary_entry_count)
+                    self_model, diary_entry_count = _refresh_self_model(
+                        self_model, diary_entry_count, memorias_fundacionais
+                    )
                     last_consolidated_count = _consolidate_if_needed(
                         diary_entry_count, last_consolidated_count
                     )

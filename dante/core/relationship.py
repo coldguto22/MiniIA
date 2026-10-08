@@ -77,15 +77,38 @@ def update_from_interaction(
     profile: str | None = None,
     now: datetime | None = None,
 ) -> RelationshipModel:
-    """Registra uma interação concreta e reduz o drive acumulado."""
+    """Registra uma interação concreta e reduz o drive acumulado.
+
+    Saudações curtas e fragmentos sem conteúdo substantivo NÃO entram no perfil.
+    """
     current = now or datetime.now(timezone.utc)
-    topic_text = ", ".join(topics or model.recent_topics)
-    evolved_profile = profile or model.otavio_profile
-    if topic_text and evolved_profile.startswith("Ainda estou conhecendo"):
-        evolved_profile = f"Otávio tem trazido temas como {topic_text}; continuo observando seus interesses."
+
+    # Filtro: só aceita tópicos com conteúdo substantivo (>= 5 palavras e
+    # pelo menos uma palavra longa, que costuma indicar substantivo ou verbo).
+    import re
+    def _eh_substantivo(topico: str) -> bool:
+        palavras = re.findall(r"\w+", topico, flags=re.UNICODE)
+        if len(palavras) < 5:
+            return False
+        return any(len(p) >= 6 for p in palavras)
+
+    candidatos = list(topics or [])
+    substantivos = [t for t in candidatos if _eh_substantivo(t)]
+
+    # Sem tópico substantivo, preserva o perfil anterior intacto.
+    if substantivos:
+        topic_text = ", ".join(substantivos)
+        evolved_profile = profile or model.otavio_profile
+        if evolved_profile.startswith("Ainda estou conhecendo"):
+            evolved_profile = f"Otávio tem trazido temas como {topic_text}; continuo observando seus interesses."
+        novos_topicos = (substantivos or model.recent_topics)[-12:]
+    else:
+        evolved_profile = profile or model.otavio_profile
+        novos_topicos = model.recent_topics
+
     return RelationshipModel(
         otavio_profile=evolved_profile,
-        recent_topics=(topics or model.recent_topics)[-12:],
+        recent_topics=novos_topicos,
         last_interaction=current,
         connection_drive=0.0,
         reciprocity_notes=(notes or model.reciprocity_notes)[-12:],

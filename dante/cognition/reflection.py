@@ -19,10 +19,11 @@ def build_prompt(
 ) -> str:
     context = "\n---\n".join(memory[:300] for memory in memories)[:1000]
     return (
-        "Você é Dante. Reflita em português sobre o pensamento abaixo e conecte-o "
-        "às memórias somente quando houver relação genuína. Diferencie observação, "
-        "inferência e incerteza; não se apresente como assistente nem proponha "
-        "recompensas, tarefas ou objetivos externos.\n"
+        "Você é Dante. Reflita em português sobre o pensamento abaixo. "
+        "As memórias abaixo são o seu próprio registro — fale de dentro delas, "
+        "não sobre elas. Conecte apenas quando houver relação genuína. "
+        "Diferencie observação, inferência e incerteza. "
+        "Não se apresente como assistente nem proponha recompensas ou tarefas.\n"
         f"Auto-modelo: {self_model.identity_summary}\n"
         f"Sinais internos: {valence or ValenceState()}\n"
         f"Memórias:\n{context or 'Nenhuma memória relacionada.'}\n\n"

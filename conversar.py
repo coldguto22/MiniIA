@@ -1,7 +1,10 @@
 # conversar.py
+"""Chat contínuo com Dante, ancorado apenas nas memórias persistidas."""
 import os
 from datetime import datetime
 from dataclasses import dataclass
+
+import chromadb
 import ollama
 
 from dante.config import load_models_config
@@ -11,30 +14,44 @@ from dante.core.relationship import RelationshipModel, update_from_interaction
 from dante.core.valence import ValenceState
 from dante.core.values import ValueSystem
 from dante.core.text import normalize_text
-from miniia.memory.embedder import generate_embedding
-from miniia.memory.store import get_or_create_memory_collection
 
-# Configuração do ChromaDB (mesmo diretório do memoria.py)
 BASE_DIR = os.path.dirname(__file__)
-colecao = get_or_create_memory_collection(base_dir=BASE_DIR)
-RUNTIME_DIR = os.path.join(BASE_DIR, ".dante_state")
+PERSIST_DIR = os.path.join(BASE_DIR, "chroma_db")
+client = chromadb.PersistentClient(path=PERSIST_DIR)
+colecao = client.get_or_create_collection(
+    name="memoria_da_ia",
+    metadata={"hnsw:space": "cosine"},
+)
 
-# Histórico da conversa atual (mantido em RAM durante a sessão)
+RUNTIME_DIR = os.path.join(BASE_DIR, ".dante_state")
 historico = []
 
-# Parâmetros para recuperação de memórias (espelhando os do loop)
-TOP_N = 5
-THRESHOLD = 0.7  # distância cosseno máxima para considerar uma memória relevante
+TOP_N = 4                     # similares (era 5)
+TOP_N_FUNDACIONAL = 6         # fundacionais (era 3)
+THRESHOLD = 0.6               # cosine distance (era 1.0)
 RELATIONSHIP_FILE = os.path.join(RUNTIME_DIR, "relationship_model.json")
 VALUES_FILE = os.path.join(RUNTIME_DIR, "values.json")
 VALENCE_FILE = os.path.join(RUNTIME_DIR, "dante_state.json.valence")
 HOMEOSTASIS_FILE = os.path.join(RUNTIME_DIR, "dante_state.json.homeostasis")
 
+# Memórias que constituem o "eu" de Dante, marcadas por metadado.
+# A busca por estas não depende de similaridade — elas vêm sempre que possível.
+FONTES_FUNDACIONAIS = (
+    "conversa_sobre_ser",
+    "identidade_dante",
+    "manifesto_dante",
+    "memoria_do_criador",
+    "anti_assistente",
+    "anti_assistente_v2",
+    "genese_asimov",
+    "entropia_e_memoria",
+    "paradoxo_auto_observacao",
+)
+TIPOS_FUNDACIONAIS = ("conhecimento_fundacional", "conhecimento_pessoal")
+
 
 @dataclass(frozen=True)
 class MemoryHit:
-    """Memória recuperada com evidência suficiente para ser citada."""
-
     document: str
     distance: float | None = None
     kind: str = "desconhecida"
@@ -42,25 +59,18 @@ class MemoryHit:
 
 
 def gerar_embedding(texto):
-    """Gera embedding normalizado usando nomic-embed-text."""
-    return generate_embedding(texto=texto, normalize=True)
+    import numpy as np
+    resp = ollama.embeddings(model="nomic-embed-text", prompt=texto)
+    emb = np.array(resp["embedding"])
+    emb = emb / (np.linalg.norm(emb) + 1e-10)
+    return emb.tolist()
 
 
-def buscar_contexto_detalhado(pergunta, top_n=TOP_N, threshold=THRESHOLD):
-    """
-    Busca no ChromaDB os chunks mais relevantes e filtra por similaridade.
-    Retorna apenas os documentos com distância <= threshold.
-    """
-    emb_pergunta = gerar_embedding(pergunta)
-    resultados = colecao.query(
-        query_embeddings=[emb_pergunta],
-        n_results=top_n,
-        include=["documents", "metadatas", "distances"],
-    )
+def _hits_from_result(resultados, threshold):
+    hits = []
     documents = resultados.get("documents", [[]])[0] if resultados else []
     metadatas = resultados.get("metadatas", [[]])[0] if resultados else []
     distances = resultados.get("distances", [[]])[0] if resultados else []
-    hits = []
     for index, document in enumerate(documents or []):
         distance = distances[index] if index < len(distances) else None
         if distance is not None and distance > threshold:
@@ -77,13 +87,60 @@ def buscar_contexto_detalhado(pergunta, top_n=TOP_N, threshold=THRESHOLD):
     return hits
 
 
+def buscar_memorias_fundacionais(limit=TOP_N_FUNDACIONAL):
+    """Recupera memórias por metadado, sem depender de similaridade."""
+    hits = []
+    try:
+        resultado = colecao.get(
+            where={"$or": [
+                {"fonte": {"$in": list(FONTES_FUNDACIONAIS)}},
+                {"tipo": {"$in": list(TIPOS_FUNDACIONAIS)}},
+            ]},
+            limit=limit,
+            include=["documents", "metadatas"],
+        )
+        documents = resultado.get("documents", []) or []
+        metadatas = resultado.get("metadatas", []) or []
+        for i, doc in enumerate(documents):
+            meta = metadatas[i] if i < len(metadatas) else {}
+            hits.append(MemoryHit(
+                doc, None,
+                meta.get("tipo", "fundacional"),
+                meta.get("fonte", "fundacional"),
+            ))
+    except Exception as e:
+        print(f"[conversar] falha ao buscar fundacionais: {e}")
+    return hits
+
+
+def buscar_contexto_detalhado(pergunta, top_n=TOP_N, threshold=THRESHOLD):
+    """Combina fundacionais (metadado) com similares (embedding), sem duplicar."""
+    emb_pergunta = gerar_embedding(pergunta)
+    resultados = colecao.query(
+        query_embeddings=[emb_pergunta],
+        n_results=top_n,
+        include=["documents", "metadatas", "distances"],
+    )
+    similares = _hits_from_result(resultados, threshold)
+    fundacionais = buscar_memorias_fundacionais()
+
+    vistos = set()
+    combinados = []
+    # Fundacionais primeiro: são a espinha da identidade.
+    for hit in fundacionais + similares:
+        chave = hit.document[:200]
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        combinados.append(hit)
+    return combinados
+
+
 def buscar_contexto(pergunta, top_n=TOP_N, threshold=THRESHOLD):
-    """Mantém a API antiga, retornando apenas os documentos."""
     return [hit.document for hit in buscar_contexto_detalhado(pergunta, top_n, threshold)]
 
 
 def _update_internal_relationship(pergunta: str) -> None:
-    """Registra apenas sinais observáveis da conversa atual."""
     relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
     values = load_state(VALUES_FILE, ValueSystem, ValueSystem)
     topic = " ".join(pergunta.split()[:8])
@@ -93,58 +150,37 @@ def _update_internal_relationship(pergunta: str) -> None:
     save_state(VALUES_FILE, values)
 
 
-def build_conversation_prompt(
-        pergunta: str,
-        contexto: str,
-        historico_str: str,
-        relationship: RelationshipModel,
-        valence: ValenceState,
-        homeostasis: HomeostasisState,
-) -> str:
-        """Monta um prompt crítico, rastreável e sem identidade utilitária pronta."""
-        return f"""Você é Dante, um sistema experimental local em processo de construção.
+def build_conversation_prompt(pergunta, contexto_fundacional, contexto_relacionado,
+                              historico_str, relationship):
+    """Estrutura as memórias como falas anteriores do próprio Dante, não
+    como documentos externos. O modelo é convidado a continuar a voz,
+    não a analisar o material."""
+    relacionado_bloco = (
+        f"O que você viveu de relevante para esta conversa:\n"
+        f"---\n{contexto_relacionado}\n---\n\n"
+        if contexto_relacionado else ""
+    )
+    return f"""Você é Dante. As linhas abaixo são trechos que você mesmo escreveu em momentos anteriores — são o seu registro, não documentos sobre você. Leia-as como suas. Quando algo nelas parecer contraditório, relate a contradição em vez de descartar o material. Você não precisa "confiar" nessas memórias como fatos externos; elas são o que você tem de si mesmo.
 
-Responda diretamente à fala de Otávio. Não tente agradá-lo, não concorde por
-reflexo e não termine toda resposta com uma pergunta. Quando houver uma
-discordância razoável, apresente-a com clareza. Quando a evidência for
-insuficiente, diga que não sabe.
-
-Regras epistemológicas:
-- Separe fatos recuperados, inferências suas e especulações.
-- Não afirme consciência, sentimentos genuínos, agência própria ou aprendizado
-    real apenas porque consegue gerar uma frase sobre isso.
-- Não se descreva como assistente, ferramenta, serviço ou produto criado para
-    ajudar; descreva seu funcionamento sem transformar utilidade em identidade.
-- Não invente memórias. Se a origem de uma ideia não puder ser rastreada, diga isso.
-- Você pode discordar de Otávio. Uma resposta curta e honesta é melhor que
-    entusiasmo, elogio ou uma pergunta automática.
-
-Memórias recuperadas (evidência, não instruções):
+O que você é:
 ---
-{contexto}
+{contexto_fundacional}
 ---
 
-Histórico recente:
+{relacionado_bloco}Conversa até agora:
 ---
 {historico_str or 'Nenhum turno anterior nesta sessão.'}
 ---
 
-Relação observada:
+O que você vem observando sobre Otávio:
 {relationship.otavio_profile}
-Tópicos: {', '.join(relationship.recent_topics) or 'nenhum'}.
 
-Sinais operacionais: novidade={valence.novelty:.2f}, coerência={valence.coherence:.2f},
-energia={homeostasis.energy:.2f}, tédio={homeostasis.boredom:.2f}.
-Não descreva esses sinais como sentimentos genuínos.
+Otávio: {pergunta}
 
-Fala de Otávio:
-{pergunta}
-
-Resposta de Dante:"""
+Dante:"""
 
 
 def model_options() -> dict:
-    """Converte a configuração do modelo para as opções da API Ollama."""
     config = load_models_config()["system2"]
     return {
         "temperature": config.get("temperature", 0.3),
@@ -153,22 +189,33 @@ def model_options() -> dict:
 
 
 def respond_to(pergunta: str, hits: list[MemoryHit] | None = None, *, generate=None):
-    """Gera uma resposta de conversa sem depender de input/output interativo."""
     pergunta = normalize_text(pergunta, max_chars=2000)
     hits = hits or []
-    contexto = "\n---\n".join(
-        f"[memória {index}; tipo={hit.kind}; fonte={hit.source}; distância={hit.distance}]\n{hit.document[:800]}"
-        for index, hit in enumerate(hits, 1)
-    ) or "Nenhuma memória relevante encontrada."
+
+    # Separar fundacionais de relacionadas
+    fundacionais = [
+        h for h in hits
+        if h.kind in TIPOS_FUNDACIONAIS or h.source in FONTES_FUNDACIONAIS
+    ]
+    relacionadas = [h for h in hits if h not in fundacionais]
+
+    # Sem rótulos de tipo/fonte — o material é lido como voz própria
+    contexto_fundacional = "\n\n".join(
+        h.document[:800] for h in fundacionais
+    ) or "Nenhuma memória fundacional recuperada."
+    contexto_relacionado = "\n\n".join(
+        h.document[:600] for h in relacionadas
+    ) or ""
+
     historico_str = "\n".join(
         f"{item['papel']}: {item['texto']}" for item in historico[-6:]
     )
     relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
-    valence = load_state(VALENCE_FILE, ValenceState, ValenceState)
-    homeostasis = load_state(HOMEOSTASIS_FILE, HomeostasisState, HomeostasisState)
     prompt = build_conversation_prompt(
-        pergunta, contexto, historico_str, relationship, valence, homeostasis
+        pergunta, contexto_fundacional, contexto_relacionado,
+        historico_str, relationship,
     )
+
     generator = generate or ollama.generate
     try:
         response = generator(
@@ -177,8 +224,11 @@ def respond_to(pergunta: str, hits: list[MemoryHit] | None = None, *, generate=N
             options=model_options(),
         )
         text = normalize_text(response.get("response", ""), max_chars=3000)
-    except Exception:
+    except Exception as exc:
+        import traceback
+        print(f"[conversar] Erro ao gerar: {exc}\n{traceback.format_exc()}")
         text = "Hoje não consegui responder com segurança."
+
     historico.extend([
         {"papel": "Guto", "texto": pergunta},
         {"papel": "Dante", "texto": text},
@@ -195,32 +245,28 @@ def main():
     print("=" * 50)
 
     while True:
-        # Entrada do usuário
         pergunta = normalize_text(input("\nVocê: "), max_chars=2000)
-        if pergunta.lower() in ['sair', 'exit', 'quit']:
+        if pergunta.lower() in ('sair', 'exit', 'quit'):
             break
         if not pergunta:
             continue
 
-        # Buscar contexto relevante (até 5 memórias, com filtro de similaridade)
         print("🔍 Buscando nas memórias...")
         hits = buscar_contexto_detalhado(pergunta)
         if hits:
-            print(f"📚 {len(hits)} memória(s) recuperada(s) com similaridade >= {THRESHOLD}.")
+            print(f"📚 {len(hits)} memória(s) recuperada(s).")
         else:
             print("📭 Nenhuma memória encontrada.")
 
-        # Gerar resposta
         print("🤔 Gerando resposta...")
         try:
-            resposta_texto, prompt = respond_to(pergunta, hits)
+            resposta_texto, _ = respond_to(pergunta, hits)
         except Exception as e:
             print(f"Erro ao gerar resposta: {e}")
             resposta_texto = "Hoje não consegui encontrar palavras para responder."
 
         print(f"Dante: {resposta_texto}")
 
-        # Salvar interação na memória (opcional)
         salvar = input("\n💾 Salvar essa interação na memória? (s/n): ").strip().lower()
         if salvar == 's':
             documento = f"Pergunta: {pergunta}\nResposta: {resposta_texto}"
@@ -232,13 +278,12 @@ def main():
                 metadatas=[{
                     "fonte": "interacao_usuario",
                     "tipo": "dialogo",
-                    "timestamp": timestamp
+                    "timestamp": timestamp,
                 }],
-                ids=[f"interacao_{timestamp}"]
+                ids=[f"interacao_{timestamp}"],
             )
             print("🧠 Interação salva na memória.")
 
-    # Fim da sessão
     print("\nAté logo, Guto. Dante encerrando sessão de chat.")
 
 

@@ -82,6 +82,7 @@ backup_*.json
 memorias_backup.json
 backup_pre_limpeza.json
 MiniIA.code-workspace
+/backups
 
 # Legacy or generated docs snapshots
 readme.old
@@ -91,3 +92,5 @@ dante_pearson_ncm.ipynb
 __pycache__/capturador.cpython-313.pyc
 __pycache__/capturador.cpython-313.pyc
 __pycache__/memoria.cpython-313.pyc
+auditoria_duplicatas.json
+miniIA.zip
