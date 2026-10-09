@@ -518,7 +518,7 @@ Texto: {texto[:600]}
 
 Decisão:"""
     try:
-        resp = ollama.generate(model="qwen2.5:3b", prompt=prompt)
+        resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
         resposta_bruta = resp['response'].strip()
         log(f"🔎 Resposta bruta do detector de curiosidade: {resposta_bruta[:150]!r}")
 

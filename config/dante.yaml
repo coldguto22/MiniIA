@@ -2,7 +2,7 @@ valence:
   decay_rate: 0.05
 homeostasis:
   energy_decay_per_cycle: 0.01
-  boredom_growth_per_cycle: 0.02
+  boredom_growth_per_cycle: 0.005    # era 0.02
 silence:
   min_novelty: 0.1
   min_coherence: 0.2
