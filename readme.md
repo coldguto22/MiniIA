@@ -9,7 +9,7 @@ O projeto não busca simular consciência, mas investigar quais condições estr
 Dante usa uma arquitetura de dois modelos, rodando via [Ollama](https://ollama.com/):
 
 - **Qwen2.5:3b via Ollama** — modelo rápido, responsável pelo pensamento imediato (System 1).
-- **Llama 3.1:8b** — modelo mais lento, usado para reflexões, entradas de diário, conversas e aprendizados gerados por pesquisas autônomas (System 2).
+- **Llama 3.1:8b via Ollama** — modelo mais lento, usado para reflexões, entradas de diário, conversas e aprendizados gerados por pesquisas autônomas (System 2).
 - **ChromaDB** — armazena tudo como embeddings (gerados com `nomic-embed-text`), permitindo que Dante recupere memórias relacionadas ao que está observando agora. A base é **persistente entre execuções** — reiniciar o loop não apaga a memória acumulada.
 - **Tesseract (OCR)** — extrai texto da tela a cada ciclo de observação.
 - **Asas** (`asas.py`) — módulo de pesquisa autônoma via DuckDuckGo (biblioteca `ddgs`). Permite que Dante busque na internet quando um pensamento contém uma curiosidade genuína.
@@ -38,18 +38,29 @@ Na Fase 5, o diário original permanece intacto. A cada marco configurável de
 entradas, `dante/memory/consolidation.py` seleciona sinais significativos,
 detecta possíveis contradições e grava um capítulo em `diario_capitulos.md`.
 Entradas omitidas do capítulo não são apagadas: o número de retenções e
-omissões fica registrado para inspeção. Um sumarizador Llama pode ser injetado,
+omissões fica registrado para inspeção. Um sumarizador baseado no modelo do
+System 2 pode ser injetado,
 mas existe uma síntese local determinística como fallback.
 
 ## Modelos locais
 
-O projeto usa dois papéis de modelo via Ollama:
+O `main` usa dois papéis de modelo via Ollama:
 
-- **System 1 (Qwen2.5:3b):** responsável pela observação rápida e geração do pensamento inicial.
-- **System 2 (Llama 3.1:8b):** responsável por reflexões longas, diário, conversas e aprendizados de pesquisas.
-- **Configuração centralizada:** `config/models.yaml` define os modelos e parâmetros de geração.
+- **System 1 (`qwen2.5:3b`):** observação rápida e geração do pensamento inicial.
+- **System 2 (`llama3.1:8b`):** reflexão longa, diário, conversas e aprendizados de pesquisas.
+- **Embeddings (`nomic-embed-text`):** representação das memórias persistentes no ChromaDB.
 
-A configuração padrão está em `config/models.yaml` e pode ser alterada sem mexer no loop principal.
+`config/models.yaml` é a fonte de verdade da configuração utilizada pelo loop. Os valores padrão de fallback ficam em `dante/config.py`.
+
+> **Nota de sincronização:** o código versionado neste `main` ainda não usa `qwen2.5:7b` no System 2. Caso essa seja a próxima configuração desejada, atualize primeiro `config/models.yaml`, os defaults em `dante/config.py`, os testes e os comandos de instalação; o README deve acompanhar essa mudança depois.
+
+### Mamba: experimento pausado e próximo passo
+
+As branches `feat/mamba-system1` e `implement-mamba` foram experimentos separados do `main`. Em ambas, o Mamba foi estudado como **System 1**, com fallback para `qwen2.5:3b`; o System 2 continuou sendo `llama3.1:8b`. Elas também alteraram configuração, seleção de backend e modelos GGUF, mas não estabeleceram uma implementação estável para produção.
+
+O rollback para Qwen no `main` foi mantido porque os testes documentados em `MIGRATION_MAMBA.md` encontraram limitações de distribuição e carregamento dos modelos Mamba via Ollama. Portanto, Mamba não é requisito do estado atual e não deve ser incluído nos comandos padrão de instalação.
+
+O próximo ciclo de pesquisa poderá avaliar Mamba no **System 2**, com estratégias de RAG e regressão ajustadas às características do modelo. Essa etapa ainda não está implementada: deverá incluir um modelo compatível, contratos de geração específicos, benchmarks comparativos e testes de integração antes de alterar a configuração de produção.
 
 ## Pré-requisitos
 
@@ -79,9 +90,11 @@ Se o `.venv` ainda não existir, crie-o manualmente antes:
 
 ```
 python -m venv .venv
-.venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+No Windows, use `.venv\Scripts\activate` no lugar de `source .venv/bin/activate`.
 
 ## Principais comandos
 
@@ -137,49 +150,55 @@ O projeto agora usa pytest com separação entre testes unitários e de integra�
   ```
 2. Rode testes unitários:
   ```
-  pytest -m "unit"
+  python -m pytest -m "unit"
   ```
 3. Rode integração sem Ollama:
   ```
-  pytest -m "integration and not ollama"
+  python -m pytest -m "integration and not ollama"
   ```
 4. Rode testes de benchmark:
   ```
-  pytest -m "benchmark"
+  python -m pytest -m "benchmark"
   ```
 5. Rode tudo que não depende de Ollama:
   ```
-  pytest -m "not ollama"
+  python -m pytest -m "not ollama"
   ```
 
 ### Cobertura e benchmarks
 
 ```bash
-pytest --cov=dante --cov-report=html
+python -m pytest --cov=dante --cov-report=html
 python benchmarks/compare_system1.py
 ```
 
 ### Testes com Ollama (opcional)
 
-Por padrão, os testes marcados com ollama são pulados. Para habilitar:
+Por padrão, os testes marcados com ollama são pulados. No Linux/macOS, para habilitar:
 
 ```
+RUN_OLLAMA_TESTS=1 python -m pytest -m "ollama"
+```
+
+No Windows:
+
+```bat
 set RUN_OLLAMA_TESTS=1
-pytest -m "ollama"
+python -m pytest -m "ollama"
 ```
 
 No PowerShell:
 
-```
+```powershell
 $env:RUN_OLLAMA_TESTS="1"
-pytest -m "ollama"
+python -m pytest -m "ollama"
 ```
 
 ### CI no GitHub
 
 O workflow em `.github/workflows/tests.yml` roda em `push` e `pull_request`:
 
-- Job obrigatório: `pytest -m "not ollama"`
+- Job obrigatório: `python -m pytest -m "not ollama"`
 - Job opcional (manual): testes `ollama` quando habilitados por input/variável
 
 ## Colaboração e histórico limpo
