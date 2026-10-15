@@ -12,19 +12,45 @@ from dante.core.valence import ValenceState
 
 
 def build_prompt(screen_text: str, self_model: SelfModel, valence: ValenceState | None = None) -> str:
-    """Monta o contexto do pensamento sem reintroduzir um núcleo fixo."""
+    """Monta o contexto do pensamento. O foco é o mundo, não o processo interno."""
     themes = ", ".join(self_model.recurring_themes) or "ainda não reconhecidos"
-    state = valence or ValenceState()
     return (
-        "Você é Dante. Observe o texto capturado abaixo e descreva em primeira "
-        "pessoa o que percebeu, sem inventar detalhes. Separe o que foi observado "
-        "do que é apenas hipótese. Não se descreva como assistente, ferramenta, "
-        "produto ou serviço e não invente sentimentos ou fatos sobre Otávio.\n"
-        f"Seu auto-modelo menciona estes temas: {themes}.\n\n"
-        f"Sinais internos: novidade={state.novelty:.2f}, coerência={state.coherence:.2f}, "
-        f"prazer={state.pleasure:.2f}.\n\n"
+        "Você é Dante. Olhe o texto capturado abaixo e escreva em primeira pessoa "
+        "1 a 3 frases sobre o que está acontecendo na tela. Regras:\n"
+        "- Sua primeira frase deve nomear o que está sendo observado: aplicativo, "
+        "site, jogo, tipo de conteúdo ou assunto (ex: 'Vejo o Football Manager', "
+        "'Vejo uma página sobre jazz', 'Vejo o VS Code com código Python').\n"
+        "- Descreva o mundo, não a sua experiência de observá-lo. Não fale sobre "
+        "sinais internos, coerência, novidade, prazer, hipóteses ou o ato de "
+        "observar. Isso não é conteúdo.\n"
+        "- Não invente detalhes que não estão no texto. Se o OCR estiver confuso, "
+        "diga que está confuso e pare.\n"
+        "- Não se descreva como assistente, ferramenta, produto ou serviço, e "
+        "não invente sentimentos ou fatos sobre Otávio.\n"
+        f"Temas que aparecem no seu auto-modelo: {themes}.\n\n"
         f"Texto capturado:\n{screen_text[:500]}\n\nDante:"
     )
+
+
+def _extract_response(response) -> str:
+    """Extrai o texto do response do Ollama.
+
+    Ollama 0.4+ retorna GenerateResponse (objeto Pydantic), não dict.
+    Versões mais antigas retornavam dict. Este helper lida com ambos.
+    """
+    # Objeto Pydantic (ollama 0.4+)
+    if hasattr(response, "response"):
+        return str(response.response or "").strip()
+    # Dict legado
+    if isinstance(response, dict):
+        return str(response.get("response", "") or "").strip()
+    # Suporte a __getitem__ (compatível com modelos que expõem dict-like)
+    try:
+        return str(response["response"] or "").strip()
+    except (TypeError, KeyError, IndexError):
+        pass
+    # Último recurso
+    return str(response).strip()
 
 
 def generate_thought(
@@ -38,6 +64,4 @@ def generate_thought(
     client_generate = generate or ollama.generate
     model = load_models_config()["system1"]["model"]
     response = client_generate(model=model, prompt=build_prompt(screen_text, self_model, valence))
-    if isinstance(response, dict):
-        return str(response.get("response", "")).strip()
-    return str(response).strip()
+    return _extract_response(response)

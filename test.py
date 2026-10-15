@@ -1,7 +1,11 @@
 import chromadb
-c = chromadb.PersistentClient(path="./chroma_db")
-col = c.get_collection("memoria_da_ia")
-for fonte in ["identidade_dante", "manifesto_dante", "memoria_do_criador",
-              "conversa_sobre_ser", "genese_asimov"]:
-    r = col.get(where={"fonte": fonte}, include=["metadatas"])
-    print(f"{fonte}: {len(r['ids'])}")
+client = chromadb.PersistentClient(path="./chroma_db")
+col = client.get_collection("memoria_da_ia")
+r = col.get(where={"tipo": "observacao_passiva"}, include=["documents", "metadatas"], limit=3)
+for doc, meta in zip(r["documents"], r["metadatas"]):
+    print("="*80)
+    print(f"ID: {meta.get('timestamp', '?')}")
+    print(f"repeticoes: {meta.get('repeticoes', '?')}")
+    print(f"--- DOCUMENTO COMPLETO (não truncado) ---")
+    print(doc)
+    print()

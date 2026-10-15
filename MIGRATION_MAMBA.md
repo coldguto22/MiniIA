@@ -2,7 +2,7 @@
 
 ## Motivação
 
-O Dante usa dois modelos em pipeline: um modelo rápido para observação imediata e um modelo mais lento para reflexão e diário. A arquitetura atual usa `qwen2.5:3b` como System 1 e `llama3.1:8b` como System 2. A integração de um modelo Mamba expande a arquitetura para um estado recorrente entre tokens, reduzindo algumas limitações de modelos puramente transformadores em cenários de individualidade persistente.
+O Dante usa dois modelos em pipeline: um modelo rápido para observação imediata e um modelo mais lento para reflexão e diário. A arquitetura atual usa `qwen2.5:3b` como System 1 e `qwen2.5:7b` como System 2. A integração de um modelo Mamba expande a arquitetura para um estado recorrente entre tokens, reduzindo algumas limitações de modelos puramente transformadores em cenários de individualidade persistente.
 
 Este documento registra a adoção da Camada 1 da estratégia proposta: substituir o System 1 por um Mamba via Ollama, mantendo o comportamento do restante do sistema e preservando fallback para Qwen quando o Mamba não estiver disponível.
 

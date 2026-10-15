@@ -46,6 +46,9 @@ def generate_reflection(
         model=model,
         prompt=build_prompt(thought, memories, self_model, valence),
     )
+    # Ollama 0.4+ retorna GenerateResponse; versões antigas retornavam dict.
+    if hasattr(response, "response"):
+        return str(response.response or "").strip()
     if isinstance(response, dict):
-        return str(response.get("response", "")).strip()
+        return str(response.get("response", "") or "").strip()
     return str(response).strip()

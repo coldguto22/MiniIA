@@ -213,7 +213,13 @@ def respond_to(pergunta: str, hits: list[MemoryHit] | None = None, *, generate=N
             prompt=prompt,
             options=model_options(),
         )
-        text = normalize_text(response.get("response", ""), max_chars=3000)
+        if hasattr(response, "response"):
+            raw_text = response.response or ""
+        elif isinstance(response, dict):
+            raw_text = response.get("response", "") or ""
+        else:
+            raw_text = ""
+        text = normalize_text(raw_text, max_chars=3000)
     except Exception as exc:
         import traceback
         print(f"[conversar] Erro ao gerar: {exc}\n{traceback.format_exc()}")
