@@ -92,7 +92,9 @@ def _advance_internal_states(novelty, coherence, *, action_initiated=False):
         boredom_growth=_RUNTIME_CONFIG["homeostasis"]["boredom_growth_per_cycle"],
     )
     if novelty >= 0.5 and coherence >= 0.2:
-        homeostasis = replenish(homeostasis, "novelty", amount=novelty * 0.15)
+        # Reduz tédio, mas nunca abaixo de 0 por ação do replenish
+        reducao = min(homeostasis.boredom, novelty * 0.05)
+        homeostasis = replenish(homeostasis, "novelty", amount=reducao)
     elif novelty < 0.1:
         homeostasis = rest(homeostasis)
     values.reinforce_from_valence(valence)
@@ -133,8 +135,10 @@ def _refresh_self_model(current, entry_count, foundational_memories=None):
 def _generate_self_model_patterns(prompt):
     """Usa o Llama para padrões quando disponível; o chamador mantém fallback local."""
     try:
-        response = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
-        return response.get("response", "")
+        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
+        if hasattr(resp, "response"):
+            return str(resp.response or "").strip()
+        return str(resp.get("response", "") if isinstance(resp, dict) else resp).strip()
     except Exception as exc:
         log(f"Llama indisponível para auto-modelo: {exc}")
         return ""
@@ -317,7 +321,9 @@ Observação atual:
 Dante (em português, 1-2 frases):"""
     try:
         resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
-        return resp['response'].strip()
+        if hasattr(resp, "response"):
+            return str(resp.response or "").strip()
+        return str(resp.get("response", "") if isinstance(resp, dict) else resp).strip()
     except Exception as e:
         log(f"Erro ao gerar reflexão: {e}")
         return ""
@@ -351,7 +357,9 @@ def _gerar_reflexao_sem_contexto_legado(pensamento_atual):
 Dante:"""
     try:
         resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
-        return resp['response'].strip()
+        if hasattr(resp, "response"):
+            return str(resp.response or "").strip()
+        return str(resp.get("response", "") if isinstance(resp, dict) else resp).strip()
     except:
         return "Hoje observei algo novo, mesmo sem conseguir conectá-lo às minhas memórias antigas."
 
@@ -389,7 +397,9 @@ def _tentar_gerar_diario(prompt):
     """Executa uma única chamada ao modelo de diário, isolando erros de rede/servidor."""
     try:
         resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
-        return resp['response'].strip()
+        if hasattr(resp, "response"):
+            return str(resp.response or "").strip()
+        return str(resp.get("response", "") if isinstance(resp, dict) else resp).strip()
     except Exception as e:
         log(f"Erro ao gerar diário: {e}")
         return ""
@@ -577,7 +587,9 @@ Com base nisso, escreva 2-3 frases em português, em primeira pessoa, sobre o qu
 Aprendizado de Dante:"""
     try:
         resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
-        return resp['response'].strip()
+        if hasattr(resp, "response"):
+            return str(resp.response or "").strip()
+        return str(resp.get("response", "") if isinstance(resp, dict) else resp).strip()
     except:
         return ""
 
