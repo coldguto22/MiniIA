@@ -3,9 +3,9 @@ system1:
   model: "qwen2.5:3b"
   fallback: "qwen2.5:3b"
   max_tokens: 512
-  temperature: 0.7
+  temperature: 0.3      # era 0.7 — observação deve ser estável
 system2:
   provider: ollama
-  model: "llama3.1:8b"
+  model: "qwen2.5:7b"
   max_tokens: 2048
-  temperature: 0.3
+  temperature: 0.7      # era 0.3 — reflexão se beneficia de diversidade

@@ -9,6 +9,7 @@ try:
 except ImportError:  # pragma: no cover - dependency is added in requirements
     yaml = None
 
+from .models.mamba_model import MambaModel
 from .models.ollama_model import OllamaModel
 
 DEFAULT_MODEL_CONFIG: dict[str, Any] = {
@@ -41,6 +42,7 @@ DEFAULT_RUNTIME_CONFIG: dict[str, Any] = {
     },
     "self_model": {"regenerate_every_days": 7, "min_diary_entries": 20},
     "relationship": {"connection_drive_growth_per_hour": 0.04},
+    "diary": {"write_when_energy_below": 0.3, "force_every_n_cycles": 20},
 }
 
 
@@ -96,4 +98,5 @@ def build_model_for(role: str, config_path: str | Path | None = None):
     model_name = role_config.get("model")
     fallback = role_config.get("fallback")
     options = {key: value for key, value in role_config.items() if key not in {"model", "fallback"}}
-    return OllamaModel(model_name=model_name, fallback_model=fallback, **options)
+    model_class = MambaModel if role_config.get("provider") == "mamba" else OllamaModel
+    return model_class(model_name=model_name, fallback_model=fallback, **options)

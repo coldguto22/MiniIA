@@ -34,6 +34,6 @@ def formatar_resultados(resultados):
     texto = ""
     for i, r in enumerate(resultados, 1):
         texto += f"{i}. {r['title']}\n"
-        texto += f"   {r['snippet'][:200]}\n"
+        texto += f"   {r['snippet'][:500]}\n"
         texto += f"   URL: {r['url']}\n\n"
     return texto.strip()

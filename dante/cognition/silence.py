@@ -8,6 +8,13 @@ from dante.core.homeostasis import HomeostasisState
 from dante.core.valence import ValenceState
 
 
+def observation_is_repeated(previous: str, current: str, threshold: float = 0.92) -> bool:
+    """Detecta OCR praticamente igual apesar de ruído entre capturas."""
+    if not previous.strip() or not current.strip():
+        return False
+    return SequenceMatcher(None, previous.casefold(), current.casefold()).ratio() >= threshold
+
+
 def should_be_silent(
     valence: ValenceState,
     homeostasis: HomeostasisState,

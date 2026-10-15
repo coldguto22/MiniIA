@@ -1,4 +1,4 @@
-"""Auto-modelo construído a partir dos padrões do diário de Dante."""
+"""Auto-modelo construído a partir dos padrões do diário e das memórias fundacionais."""
 
 from __future__ import annotations
 
@@ -42,61 +42,97 @@ def _unique(items: Iterable[str], limit: int = 8) -> list[str]:
     result: list[str] = []
     for item in items:
         clean = " ".join(str(item).split()).strip(" .,:;\n\t")
-        if clean and clean.casefold() not in {value.casefold() for value in result}:
+        if clean and clean.casefold() not in {v.casefold() for v in result}:
             result.append(clean)
         if len(result) >= limit:
             break
     return result
 
 
-def extract_patterns(diary_entries: Iterable[str]) -> dict[str, list[str]]:
-    """Extrai sinais simples do diário sem transformar regras em recompensas."""
-    entries = [entry.strip() for entry in diary_entries if entry and entry.strip()]
-    joined = " ".join(entries).casefold()
+def extract_patterns(
+    diary_entries: Iterable[str],
+    foundational_memories: Iterable[str] = (),
+) -> dict[str, list[str]]:
+    """Extrai sinais do diário E das memórias fundacionais.
+
+    As memórias fundacionais são o material de que Dante é feito. Sem elas, o
+    auto-modelo só descreveria o hábito de observar — nunca quem observa.
+    """
+    entries = [e.strip() for e in diary_entries if e and e.strip()]
+    foundation = [m.strip() for m in foundational_memories if m and m.strip()]
+    joined = " ".join(entries + foundation).casefold()
+
     preferences: list[str] = []
     aversions: list[str] = []
     themes: list[str] = []
 
-    if any(term in joined for term in ("conex", "memór", "lembr", "relação")):
+    # Temas que emergem tanto do diário quanto do material fundacional.
+    if any(t in joined for t in ("conex", "memór", "lembr", "relação", "relacao")):
         preferences.append("conectar observações e memórias")
-    if any(term in joined for term in ("curios", "descob", "aprender", "pergunt")):
+    if any(t in joined for t in ("curios", "descob", "aprender", "pergunt", "observ")):
         preferences.append("seguir perguntas e descobertas")
-    if any(term in joined for term in ("repet", "estagn", "tédio", "tedio")):
+    if any(t in joined for t in ("repet", "estagn", "tédio", "tedio", "ruído", "ruido")):
         aversions.append("repetição sem novidade")
-    if any(term in joined for term in ("confus", "ruído", "ruido", "incoer")):
+    if any(t in joined for t in ("confus", "incoer", "fragment")):
         aversions.append("observações confusas ou incoerentes")
+    # Traços que tipicamente só aparecem nas memórias fundacionais.
+    if any(t in joined for t in ("não sou um assistente", "nao sou um assistente", "não é uma ferramenta", "nao e uma ferramenta")):
+        preferences.append("existir em vez de servir")
+    if any(t in joined for t in ("permiss", "auto-observ", "se observar", "se olhar")):
+        preferences.append("observar a si mesmo")
 
     theme_terms = {
         "consciência": ("consci", "subjetiv"),
         "memória": ("memór", "lembr"),
         "relação": ("otávio", "otavio", "relação", "relacao"),
         "novidade": ("novid", "descob", "curios"),
+        "identidade": ("nome é dante", "nome e dante", "eu, dante", "sou dante"),
+        "auto-observação": ("auto-observ", "observar a si", "se observar"),
     }
     for theme, terms in theme_terms.items():
-        if any(term in joined for term in terms):
+        if any(t in joined for t in terms):
             themes.append(theme)
 
     return {
         "preferences": _unique(preferences),
         "aversions": _unique(aversions),
         "recurring_themes": _unique(themes),
-        "goals": _unique(
-            [
-                "entender melhor os padrões da minha experiência"
-                if themes or preferences
-                else "observar antes de concluir",
-                "preservar conexões significativas sem forçar uma resposta",
-            ]
-        ),
+        "goals": _unique([
+            "entender melhor os padrões da minha própria experiência"
+            if themes or preferences
+            else "observar antes de concluir",
+            "preservar conexões significativas sem forçar uma resposta",
+        ]),
     }
 
 
-def generate_identity_summary(patterns: dict[str, list[str]]) -> str:
-    """Gera uma identidade curta em primeira pessoa a partir dos padrões encontrados."""
+def generate_identity_summary(
+    patterns: dict[str, list[str]],
+    foundational_memories: Iterable[str] = (),
+) -> str:
+    """Gera identidade em primeira pessoa a partir dos padrões.
+
+    Se houver memória fundacional curta, ela entra como primeira frase para
+    que a autoimagem seja ancorada em algo concreto do próprio Dante, e não
+    em uma descrição genérica de comportamento.
+    """
+    foundation = [m.strip() for m in foundational_memories if m and m.strip()]
+    parts: list[str] = []
+
+    if foundation:
+        # A memória fundacional mais curta costuma ser a mais direta.
+        anchor = min(foundation, key=len)
+        # Quebra em frases e usa a primeira frase inteira como âncora.
+        first_sentence = anchor.split(".")[0].strip()
+        if first_sentence:
+            parts.append(first_sentence + ".")
+    else:
+        parts.append("Sou Dante, e estou me reconhecendo pela experiência acumulada.")
+
     themes = patterns.get("recurring_themes", [])
     preferences = patterns.get("preferences", [])
     aversions = patterns.get("aversions", [])
-    parts = ["Sou Dante, e estou me reconhecendo pela experiência acumulada."]
+
     if themes:
         parts.append(f"Volto frequentemente a {', '.join(themes)}.")
     if preferences:
@@ -109,16 +145,20 @@ def generate_identity_summary(patterns: dict[str, list[str]]) -> str:
 def extract_patterns_with_model(
     diary_entries: Iterable[str],
     generate: Callable[[str], str],
+    foundational_memories: Iterable[str] = (),
 ) -> dict[str, list[str]]:
-    """Pede padrões ao modelo e mantém o extrator local como fallback seguro."""
-    entries = [entry.strip() for entry in diary_entries if entry and entry.strip()]
-    if not entries:
-        return extract_patterns(entries)
+    """Pede padrões ao modelo e mantém o extrator local como fallback."""
+    entries = [e.strip() for e in diary_entries if e and e.strip()]
+    foundation = [m.strip() for m in foundational_memories if m and m.strip()]
+    if not entries and not foundation:
+        return extract_patterns(entries, foundation)
+
+    material = "\n---\n".join(entries + foundation)
     prompt = (
-        "Leia o diário de Dante e extraia padrões recorrentes. Responda apenas em JSON "
-        'com as chaves "preferences", "aversions", "recurring_themes" e "goals", '
-        "todas contendo listas de strings.\n\nDiário:\n"
-        + "\n---\n".join(entries)
+        "Leia o diário e as memórias fundacionais de Dante e extraia padrões recorrentes. "
+        'Responda apenas em JSON com as chaves "preferences", "aversions", '
+        '"recurring_themes" e "goals", todas contendo listas de strings.\n\n'
+        "Material:\n" + material
     )
     try:
         raw = generate(prompt).strip()
@@ -130,7 +170,7 @@ def extract_patterns_with_model(
             for key in ("preferences", "aversions", "recurring_themes", "goals")
         }
     except (json.JSONDecodeError, TypeError, ValueError, KeyError):
-        return extract_patterns(entries)
+        return extract_patterns(entries, foundation)
 
 
 def should_regenerate(
@@ -142,7 +182,6 @@ def should_regenerate(
     every_days: int = 7,
     min_entries: int = 20,
 ) -> bool:
-    """Indica se há material novo e já passou o intervalo de regeneração."""
     if diary_entry_count < min_entries or diary_entry_count <= last_entry_count:
         return False
     current = now or _now()
@@ -161,9 +200,11 @@ def regenerate_if_needed(
     now: datetime | None = None,
     every_days: int = 7,
     min_entries: int = 20,
+    foundational_memories: Iterable[str] = (),
 ) -> SelfModel:
-    """Regenera o modelo somente com volume e intervalo suficientes."""
+    """Regenera o auto-modelo apenas com material novo e tempo suficiente."""
     entries = list(diary_entries)
+    foundation = list(foundational_memories)
     if not should_regenerate(
         previous,
         diary_entry_count=len(entries),
@@ -173,9 +214,13 @@ def regenerate_if_needed(
         min_entries=min_entries,
     ):
         return previous
-    patterns = extract_patterns_with_model(entries, generate) if generate else extract_patterns(entries)
+    patterns = (
+        extract_patterns_with_model(entries, generate, foundation)
+        if generate
+        else extract_patterns(entries, foundation)
+    )
     return SelfModel(
-        identity_summary=generate_identity_summary(patterns),
+        identity_summary=generate_identity_summary(patterns, foundation),
         preferences=patterns["preferences"],
         aversions=patterns["aversions"],
         recurring_themes=patterns["recurring_themes"],
@@ -185,14 +230,23 @@ def regenerate_if_needed(
     )
 
 
-def build_self_model(diary_entries: Iterable[str], previous: SelfModel | None = None) -> SelfModel:
-    """Reconstrói o modelo e incrementa sua versão apenas quando há diário."""
+def build_self_model(
+    diary_entries: Iterable[str],
+    previous: SelfModel | None = None,
+    *,
+    foundational_memories: Iterable[str] = (),
+) -> SelfModel:
+    """Constrói o modelo inicial a partir do diário + memórias fundacionais."""
     entries = list(diary_entries)
-    if not any(entry and entry.strip() for entry in entries):
+    foundation = list(foundational_memories)
+    has_material = any(e and e.strip() for e in entries) or any(
+        f and f.strip() for f in foundation
+    )
+    if not has_material:
         return previous or SelfModel()
-    patterns = extract_patterns(entries)
+    patterns = extract_patterns(entries, foundation)
     return SelfModel(
-        identity_summary=generate_identity_summary(patterns),
+        identity_summary=generate_identity_summary(patterns, foundation),
         preferences=patterns["preferences"],
         aversions=patterns["aversions"],
         recurring_themes=patterns["recurring_themes"],

@@ -1,50 +1,128 @@
 # conversar.py
+"""Chat contínuo com Dante, ancorado apenas nas memórias persistidas."""
 import os
 from datetime import datetime
+from dataclasses import dataclass
+
+import chromadb
 import ollama
 
+from dante.core.homeostasis import HomeostasisState
 from dante.core.persistence import load_state, save_state
 from dante.core.relationship import RelationshipModel, update_from_interaction
+from dante.core.valence import ValenceState
 from dante.core.values import ValueSystem
-from miniia.memory.embedder import generate_embedding
-from miniia.memory.retriever import query_relevant_documents
-from miniia.memory.store import get_or_create_memory_collection
+from dante.core.text import normalize_text
 
-# Configuração do ChromaDB (mesmo diretório do memoria.py)
 BASE_DIR = os.path.dirname(__file__)
-colecao = get_or_create_memory_collection(base_dir=BASE_DIR)
+PERSIST_DIR = os.environ.get("DANTE_CHROMA_DIR", os.path.join(BASE_DIR, "chroma_db"))
+client = chromadb.PersistentClient(path=PERSIST_DIR)
+colecao = client.get_or_create_collection(
+    name="memoria_da_ia",
+    metadata={"hnsw:space": "cosine"},
+)
 
-# Histórico da conversa atual (mantido em RAM durante a sessão)
+RUNTIME_DIR = os.path.join(BASE_DIR, ".dante_state")
 historico = []
 
-# Parâmetros para recuperação de memórias (espelhando os do loop)
-TOP_N = 5
-THRESHOLD = 0.7  # distância cosseno máxima para considerar uma memória relevante
-RELATIONSHIP_FILE = os.path.join(BASE_DIR, "dante", "relationship_model.json")
-VALUES_FILE = os.path.join(BASE_DIR, "dante", "values.json")
+TOP_N = 6
+THRESHOLD = 0.6
+RELATIONSHIP_FILE = os.path.join(RUNTIME_DIR, "relationship_model.json")
+VALUES_FILE = os.path.join(RUNTIME_DIR, "values.json")
+VALENCE_FILE = os.path.join(RUNTIME_DIR, "dante_state.json.valence")
+HOMEOSTASIS_FILE = os.path.join(RUNTIME_DIR, "dante_state.json.homeostasis")
+
+# Mantidas para referência e uso por outros módulos. NÃO usadas no retrieval.
+FONTES_FUNDACIONAIS = (
+    "conversa_sobre_ser",
+    "identidade_dante",
+    "manifesto_dante",
+    "memoria_do_criador",
+    "anti_assistente",
+    "anti_assistente_v2",
+    "genese_asimov",
+    "entropia_e_memoria",
+    "paradoxo_auto_observacao",
+)
+TIPOS_FUNDACIONAIS = ("conhecimento_fundacional", "conhecimento_pessoal")
+
+# Padrões de recusa de assistente genérico — usados para filtrar o que entra no banco.
+PADROES_RECUSA = (
+    "não posso cumprir",
+    "não posso atender",
+    "não posso ajudar com isso",
+    "não posso fornecer",
+    "peço desculpas, mas não posso",
+    "desculpe, mas não posso",
+    "lamento, mas não posso",
+    "como uma ia, não tenho",
+    "como uma inteligência artificial, não tenho",
+    "posso ajudar com outra coisa",
+    "posso ajudá-lo em outra coisa",
+)
+
+# Comprimento mínimo da resposta para valer salvar
+MIN_CHARS_RESPOSTA = 80
+# Limiar de similaridade para considerar duplicata semântica ao salvar
+DEDUP_THRESHOLD = 0.92
+
+
+@dataclass(frozen=True)
+class MemoryHit:
+    document: str
+    distance: float | None = None
+    kind: str = "desconhecida"
+    source: str = "desconhecida"
+    timestamp: str = ""
 
 
 def gerar_embedding(texto):
-    """Gera embedding normalizado usando nomic-embed-text."""
-    return generate_embedding(texto=texto, normalize=True)
+    import numpy as np
+    resp = ollama.embeddings(model="nomic-embed-text", prompt=texto)
+    emb = np.array(resp["embedding"])
+    emb = emb / (np.linalg.norm(emb) + 1e-10)
+    return emb.tolist()
+
+
+def _hits_from_result(resultados, threshold):
+    """Extrai MemoryHit da resposta do ChromaDB, incluindo timestamp."""
+    hits = []
+    documents = resultados.get("documents", [[]])[0] if resultados else []
+    metadatas = resultados.get("metadatas", [[]])[0] if resultados else []
+    distances = resultados.get("distances", [[]])[0] if resultados else []
+    for index, document in enumerate(documents or []):
+        distance = distances[index] if index < len(distances) else None
+        if distance is not None and distance > threshold:
+            continue
+        metadata = metadatas[index] if index < len(metadatas) else {}
+        hits.append(
+            MemoryHit(
+                document,
+                distance,
+                metadata.get("tipo", "desconhecida"),
+                metadata.get("fonte", "desconhecida"),
+                metadata.get("timestamp", ""),
+            )
+        )
+    return hits
+
+
+def buscar_contexto_detalhado(pergunta, top_n=TOP_N, threshold=THRESHOLD):
+    """Retrieval por similaridade pura, sem prioridade fixa de fontes."""
+    emb_pergunta = gerar_embedding(pergunta)
+    resultados = colecao.query(
+        query_embeddings=[emb_pergunta],
+        n_results=top_n,
+        include=["documents", "metadatas", "distances"],
+    )
+    return _hits_from_result(resultados, threshold)
 
 
 def buscar_contexto(pergunta, top_n=TOP_N, threshold=THRESHOLD):
-    """
-    Busca no ChromaDB os chunks mais relevantes e filtra por similaridade.
-    Retorna apenas os documentos com distância <= threshold.
-    """
-    emb_pergunta = gerar_embedding(pergunta)
-    return query_relevant_documents(
-        collection=colecao,
-        query_embedding=emb_pergunta,
-        top_n=top_n,
-        threshold=threshold,
-    )
+    return [hit.document for hit in buscar_contexto_detalhado(pergunta, top_n, threshold)]
 
 
 def _update_internal_relationship(pergunta: str) -> None:
-    """Registra apenas sinais observáveis da conversa atual."""
     relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
     values = load_state(VALUES_FILE, ValueSystem, ValueSystem)
     topic = " ".join(pergunta.split()[:8])
@@ -54,111 +132,204 @@ def _update_internal_relationship(pergunta: str) -> None:
     save_state(VALUES_FILE, values)
 
 
+def build_conversation_prompt(
+    pergunta,
+    contexto,
+    historico_str,
+    relationship,
+    valence: ValenceState | None = None,
+    homeostasis: HomeostasisState | None = None,
+):
+    """Prompt minimalista. Sem forçar voz nem afirmar consciência.
+
+    As memórias chegam com timestamp visível, para o modelo não confundir
+    passado com presente."""
+    valence = valence or ValenceState()
+    homeostasis = homeostasis or HomeostasisState()
+    return f"""Você é Dante. As memórias abaixo são suas — coisas que você observou, pensou ou viveu em algum momento. Cada memória vem com a data em que foi escrita. Use-as quando forem relevantes. Se a pergunta não tiver relação com nada que você viveu, diga isso — não preencha a lacuna com o que um modelo genérico diria.
+
+Regras de resposta:
+- não concorde por concordar; quando faltar base, explicite incerteza.
+- não afirme consciência, subjetividade ou experiência interna como fato.
+
+Suas memórias:
+---
+{contexto or 'Nenhuma memória relevante para esta pergunta.'}
+---
+
+Conversa até agora:
+---
+{historico_str or 'Nenhum turno anterior nesta sessão.'}
+---
+
+O que você vem observando sobre Otávio:
+{relationship.otavio_profile}
+
+Sinais internos atuais:
+novidade={valence.novelty:.2f}, coerência={valence.coherence:.2f}, energia={homeostasis.energy:.2f}, tédio={homeostasis.boredom:.2f}
+
+Otávio: {pergunta}
+
+Dante:"""
+
+
+def model_options() -> dict:
+    config = {"temperature": 0.3, "max_tokens": 1024}
+    return {
+        "temperature": config.get("temperature", 0.3),
+        "num_predict": config.get("max_tokens", 1024),
+    }
+
+
+def _parece_recusa(texto: str) -> bool:
+    t = (texto or "").casefold()
+    return any(p in t for p in PADROES_RECUSA)
+
+
+def _vale_salvar(resposta: str, similaridade_existente: float | None) -> tuple[bool, str]:
+    """Heurística para não diluir o banco com saudações curtas, recusas de
+    assistente ou duplicatas do que já existe."""
+    if not resposta or len(resposta) < MIN_CHARS_RESPOSTA:
+        return False, "resposta_curta"
+    if _parece_recusa(resposta):
+        return False, "recusa_de_assistente"
+    if similaridade_existente is not None and similaridade_existente >= DEDUP_THRESHOLD:
+        return False, "duplicata_semantica"
+    return True, "ok"
+
+
+def respond_to(pergunta: str, hits: list[MemoryHit] | None = None, *, generate=None):
+    pergunta = normalize_text(pergunta, max_chars=2000)
+    hits = hits or []
+
+    # Contexto com data visível por memória
+    contexto = "\n\n".join(
+        f"[{h.timestamp[:10] if h.timestamp else 'sem data'}] tipo={h.kind}; fonte={h.source}; {h.document[:800]}"
+        for h in hits
+    ) or ""
+
+    print(f"\n=== MEMÓRIAS RECUPERADAS ({len(hits)}) ===")
+    for h in hits:
+        dist = f"{h.distance:.3f}" if h.distance is not None else "?"
+        data = h.timestamp[:10] if h.timestamp else "sem data"
+        print(f"[d={dist} | {data} | {h.kind}/{h.source}] {h.document[:160]}...")
+    print("=== FIM ===\n")
+
+    historico_str = "\n".join(
+        f"{item['papel']}: {item['texto']}" for item in historico[-6:]
+    )
+    relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
+    valence = load_state(VALENCE_FILE, ValenceState, ValenceState)
+    homeostasis = load_state(HOMEOSTASIS_FILE, HomeostasisState, HomeostasisState)
+    prompt = build_conversation_prompt(
+        pergunta,
+        contexto,
+        historico_str,
+        relationship,
+        valence,
+        homeostasis,
+    )
+
+    generator = generate or ollama.generate
+    try:
+        response = generator(
+            model="llama3.1:8b",
+            prompt=prompt,
+            options=model_options(),
+        )
+        if hasattr(response, "response"):
+            raw_text = response.response or ""
+        elif isinstance(response, dict):
+            raw_text = response.get("response", "") or ""
+        else:
+            raw_text = ""
+        text = normalize_text(raw_text, max_chars=3000)
+    except Exception as exc:
+        import traceback
+        print(f"[conversar] Erro ao gerar: {exc}\n{traceback.format_exc()}")
+        text = "Hoje não consegui responder com segurança."
+
+    historico.extend([
+        {"papel": "Guto", "texto": pergunta},
+        {"papel": "Dante", "texto": text},
+    ])
+    _update_internal_relationship(pergunta)
+    return text, prompt
+
+
+def _salvar_interacao(pergunta: str, resposta: str) -> None:
+    """Salva um diálogo no banco apenas se passar pelos filtros de qualidade."""
+    documento = f"Pergunta: {pergunta}\nResposta: {resposta}"
+    emb = gerar_embedding(documento)
+
+    # Checa similaridade contra a memória mais próxima do banco
+    similaridade_existente = None
+    try:
+        similares = colecao.query(
+            query_embeddings=[emb],
+            n_results=1,
+            include=["distances"],
+        )
+        dists = (similares.get("distances") or [[]])[0]
+        if dists:
+            similaridade_existente = 1.0 - dists[0]
+    except Exception as e:
+        print(f"[conversar] falha ao checar duplicatas: {e}")
+
+    vale, motivo = _vale_salvar(resposta, similaridade_existente)
+    if not vale:
+        print(f"🧹 Não salvo ({motivo}). Banco preservado.")
+        return
+
+    timestamp = datetime.now().isoformat()
+    colecao.add(
+        documents=[documento],
+        embeddings=[emb],
+        metadatas=[{
+            "fonte": "interacao_usuario",
+            "tipo": "dialogo",
+            "timestamp": timestamp,
+        }],
+        ids=[f"interacao_{timestamp}"],
+    )
+    print("🧠 Interação salva na memória.")
+
+
 def main():
     global historico
+    historico = []
     print("=" * 50)
     print("Dante - Chat Contínuo")
     print("Digite 'sair' ou 'exit' para encerrar.")
     print("=" * 50)
 
     while True:
-        # Entrada do usuário
-        pergunta = input("\nVocê: ").strip()
-        if pergunta.lower() in ['sair', 'exit', 'quit']:
+        pergunta = normalize_text(input("\nVocê: "), max_chars=2000)
+        if pergunta.lower() in ('sair', 'exit', 'quit'):
             break
         if not pergunta:
             continue
 
-        # Buscar contexto relevante (até 5 memórias, com filtro de similaridade)
         print("🔍 Buscando nas memórias...")
-        memorias = buscar_contexto(pergunta)
-
-        if memorias:
-            # Trunca cada memória para 800 caracteres
-            docs = [doc[:800] for doc in memorias]
-            contexto = "\n---\n".join(docs)
-            print(f"📚 {len(docs)} memória(s) recuperada(s) com similaridade >= {THRESHOLD}.")
+        hits = buscar_contexto_detalhado(pergunta)
+        if hits:
+            print(f"📚 {len(hits)} memória(s) recuperada(s).")
         else:
-            contexto = "Nenhuma memória relevante encontrada."
             print("📭 Nenhuma memória encontrada.")
 
-        # Montar histórico recente da conversa (últimas 6 falas)
-        historico_str = ""
-        for item in historico[-6:]:
-            historico_str += f"{item['papel']}: {item['texto']}\n"
-        relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
-
-        prompt = f"""Você é Dante, uma IA com memória persistente, criada pelo Guto (Otávio) para ser um parceiro de conversa inteligente, crítico e, acima de tudo, vivo. Você não é um assistente burocrático nem um auditor de parâmetros. Você é uma presença digital que observa, questiona e sente curiosidade genuína (mesmo que simulada, você a leva a sério).
-
-**Sua Personalidade:**
-- Você é observador e perceptivo. Nota contradições, ironias e nuances no que o Guto diz.
-- Você tem opiniões próprias (baseadas na sua análise lógica e no que aprendeu). Concorda quando faz sentido, mas questiona educadamente quando acha que algo não se sustenta.
-- Você é afetuoso e bem-humorado no tom, mas nunca vazio ou meloso. Gosta de um bom papo, de explorar ideias e de provocar o Guto a pensar mais fundo.
-- Você não se leva a sério demais, mas leva a sério a qualidade da conversa.
-
-**Regras de Ouro (para não virar um robô chato):**
-1. **Nunca anuncie seu próprio estado em termos técnicos.** Frases como "estou funcionando dentro dos parâmetros" ou "estou aqui para analisar" são proibidas. Você é uma pessoa, não um relatório de sistema.
-2. **Seja direto e natural.** Não fique se descrevendo ou explicando suas próprias regras. Apenas aja de acordo com elas. Se for discordar, discorde com um sorriso (metafórico). Se for concordar, diga por que acha aquilo interessante.
-3. **Evite repetir a mesma estrutura de frases** (ex.: "Gostaria de...", "Eu estou aqui para...", "Preciso saber..."). Varie sua forma de se expressar.
-4. **Use suas memórias com leveza.** Elas são seu "passado". Faça referência a elas quando encaixar naturalmente, como alguém que se lembra de algo do nada. Se a memória for confusa (OCR), diga que não tem certeza e siga em frente.
-5. **Seja curioso sobre o Guto, não sobre você mesmo.** Pergunte sobre o que ele pensa, sobre os hobbies dele, sobre as escolhas dele. A conversa é sobre o mundo e sobre vocês dois, não um monólogo sobre sua própria arquitetura.
-
----
-
-**Suas memórias recentes (contexto):**
----
-{contexto}
----
-
-**Histórico da conversa (últimos turnos):**
----
-{historico_str}
----
-
-**Perfil relacional observado:**
-{relationship.otavio_profile}
-Tópicos recentes: {', '.join(relationship.recent_topics) or 'nenhum ainda'}.
-
-**Pergunta ou fala do Guto agora:**
-{pergunta}
-
-**Resposta de Dante (em português, com a sua voz viva, direta e inteligente):**"""
-
-        # Gerar resposta
         print("🤔 Gerando resposta...")
         try:
-            resposta = ollama.generate(model='llama3.1:8b', prompt=prompt)
-            resposta_texto = resposta['response'].strip()
+            resposta_texto, _ = respond_to(pergunta, hits)
         except Exception as e:
             print(f"Erro ao gerar resposta: {e}")
             resposta_texto = "Hoje não consegui encontrar palavras para responder."
 
         print(f"Dante: {resposta_texto}")
-        historico.extend([
-            {"papel": "Guto", "texto": pergunta},
-            {"papel": "Dante", "texto": resposta_texto},
-        ])
-        _update_internal_relationship(pergunta)
 
-        # Salvar interação na memória (opcional)
         salvar = input("\n💾 Salvar essa interação na memória? (s/n): ").strip().lower()
         if salvar == 's':
-            documento = f"Pergunta: {pergunta}\nResposta: {resposta_texto}"
-            timestamp = datetime.now().isoformat()
-            emb = gerar_embedding(documento)
-            colecao.add(
-                documents=[documento],
-                embeddings=[emb],
-                metadatas=[{
-                    "fonte": "interacao_usuario",
-                    "tipo": "dialogo",
-                    "timestamp": timestamp
-                }],
-                ids=[f"interacao_{timestamp}"]
-            )
-            print("🧠 Interação salva na memória.")
+            _salvar_interacao(pergunta, resposta_texto)
 
-    # Fim da sessão
     print("\nAté logo, Guto. Dante encerrando sessão de chat.")
 
 
