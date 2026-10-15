@@ -65,6 +65,7 @@ logs/
 
 # Local project data (sensitive or machine-specific)
 chroma_db/
+chroma_db_a2_recovered/
 chroma_db.zip
 dante.log
 dante_legado.log
@@ -95,3 +96,5 @@ __pycache__/memoria.cpython-313.pyc
 auditoria_duplicatas.json
 miniIA.zip
 para_limpar.json
+Dante_Mamba_Arquitetura_Fatec_Expandida.pdf
+Dante_Mamba_Lean_Canvas.pdf

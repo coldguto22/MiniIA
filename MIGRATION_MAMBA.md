@@ -20,7 +20,7 @@ Este documento registra a adoção da Camada 1 da estratégia proposta: substitu
 | --- | --- | --- | --- | --- |
 | Qwen2.5:3b | System 1 de fallback | Média | Boa | Estável, bem conhecido e amplamente disponível |
 | Mamba | System 1 principal | Variável | Boa | Requer suporte via Ollama e pode ter comportamento diferente em prompts longos |
-| Llama 3.1:8b | System 2 | Mais alta | Menor | Usado para reflexão profunda e diário |
+| Qwen2.5:7b | System 2 | Mais alta | Menor | Usado para reflexão profunda e diário |
 
 ## Limitações conhecidas
 
@@ -35,12 +35,17 @@ Este documento registra a adoção da Camada 1 da estratégia proposta: substitu
 ## Estado atual da migração
 
 - O suporte arquitetural para Mamba foi preservado via `dante/models/mamba_model.py` e `dante/config.py`.
-- A implementação permanece compatível e pronta para uma troca futura de modelo sem mexer no loop principal.
+- A fábrica de modelos agora respeita `provider: mamba` e seleciona `MambaModel` sem alterar o loop principal.
+- O adapter oferece `generate_with_state()` usando o campo `context` retornado pelo Ollama.
+- Checkpoints versionados em `dante/models/checkpoint.py` validam modelo, backend, sessão e checksum do payload.
+- O estado atual é identificado como `ollama-context`: ele representa continuação serializável de prompt, não acesso direto ao estado recorrente interno do Mamba.
 - A configuração não deve apontar para o Mamba quebrado em ambiente de produção; o uso real do modelo precisa de um pacote válido do Ollama ou de um arquivo GGUF compatível com a versão do runtime do Ollama.
 
 ## Próximos passos
 
-- Camada 2: controlar e persistir o estado recorrente do Mamba.
+- Validar um backend que exponha o estado recorrente interno do Mamba, além do contexto do Ollama.
+- Integrar `save_checkpoint()` e `load_checkpoint()` ao ciclo por sessão, mantendo reset e isolamento explícitos.
+- Adicionar burn-in com memórias do ChromaDB e registrar o conjunto recuperado no metadata do checkpoint.
 - Camada 3: combinar Mamba com atenção e um pipeline de passagem de estado do System 1 para o System 2.
 - Explorar benchmarks comparativos em `benchmarks/compare_system1.py` para quantificar ganhos reais de latência e qualidade.
 
