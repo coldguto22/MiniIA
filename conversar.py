@@ -16,7 +16,7 @@ from dante.core.values import ValueSystem
 from dante.core.text import normalize_text
 
 BASE_DIR = os.path.dirname(__file__)
-PERSIST_DIR = os.path.join(BASE_DIR, "chroma_db")
+PERSIST_DIR = os.environ.get("DANTE_CHROMA_DIR", os.path.join(BASE_DIR, "chroma_db"))
 client = chromadb.PersistentClient(path=PERSIST_DIR)
 colecao = client.get_or_create_collection(
     name="memoria_da_ia",

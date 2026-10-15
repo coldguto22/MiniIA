@@ -92,7 +92,7 @@ def _advance_internal_states(novelty, coherence, *, action_initiated=False):
         boredom_growth=_RUNTIME_CONFIG["homeostasis"]["boredom_growth_per_cycle"],
     )
     if novelty >= 0.5 and coherence >= 0.2:
-        homeostasis = replenish(homeostasis, "novelty", amount=0.02)
+        homeostasis = replenish(homeostasis, "novelty", amount=novelty * 0.15)
     elif novelty < 0.1:
         homeostasis = rest(homeostasis)
     values.reinforce_from_valence(valence)
@@ -172,7 +172,10 @@ CYCLES_ENTRE_PESQUISAS = 8          # Frequência mínima (a cada N ciclos)
 ULTIMO_CICLO_PESQUISA = 0           # Controle interno (não alterar)
 
 # --- Inicialização do ChromaDB (base persistente) ---
-PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
+PERSIST_DIR = os.environ.get(
+    "DANTE_CHROMA_DIR",
+    os.path.join(os.path.dirname(__file__), "chroma_db"),
+)
 try:
     client = chromadb.PersistentClient(path=PERSIST_DIR)
     colecao = client.get_or_create_collection(
@@ -431,13 +434,9 @@ def parece_deriva_de_papel(texto):
     return any(padrao in texto_lower for padrao in padroes)
 
 def salvar_na_memoria(documento, tipo, usar_embedding=True,
-                      fonte="loop_passivo", dedup_threshold=0.92):
-    """Grava uma memória, deduplicando contra as existentes do mesmo tipo.
-
-    Se uma memória suficientemente similar já existir, incrementa um contador
-    de repetições nela em vez de criar uma nova entrada. Isso impede que o
-    loop passivo polua o banco com ecos da mesma observação.
-    """
+                      fonte="loop_passivo", dedup_threshold=0.92,
+                      metadata_extra=None):
+    """Grava a substância da memória e mantém contexto auxiliar em metadata."""
     if colecao is None:
         return
 
@@ -477,6 +476,10 @@ def salvar_na_memoria(documento, tipo, usar_embedding=True,
         "truncado": len(documento) > MAX_CHARS_EMBEDDING,
         "repeticoes": 1,
     }
+    if metadata_extra:
+        for key, value in metadata_extra.items():
+            if key not in metadados:
+                metadados[key] = value
     dados = {
         "documents": [doc_truncado],
         "metadatas": [metadados],
@@ -716,9 +719,10 @@ def main():
                         log(f"📚 Aprendizado: {aprendizado[:100]}...")
                         # Salva o aprendizado na memória
                         salvar_na_memoria(
-                            f"Pesquisa: {query}\nAprendizado: {aprendizado}",
+                            aprendizado,
                             "pesquisa_autonoma",
-                            fonte="pesquisa_autonoma"
+                            fonte="pesquisa_autonoma",
+                            metadata_extra={"query_pesquisa": query[:200]},
                         )
                         # Registra no diário imediatamente
                         with open(DIARIO_FILE, "a", encoding="utf-8") as f:
@@ -732,11 +736,22 @@ def main():
 
             # 6. Salvar pensamento e reflexão na memória (apenas se o texto não for lixo)
             if not pular_salvamento:
-                doc_pensamento = f"Observação: {texto_observado}\nPensamento: {pensamento}"
-                salvar_na_memoria(doc_pensamento, "observacao_passiva", fonte="loop_passivo")
+                salvar_na_memoria(
+                    pensamento,
+                    "observacao_passiva",
+                    fonte="loop_passivo",
+                    metadata_extra={"observacao_bruta": texto_observado[:2000]},
+                )
                 if reflexao:
-                    doc_reflexao = f"Reflexão: {reflexao}\n(Baseado em: {pensamento})"
-                    salvar_na_memoria(doc_reflexao, "reflexao", fonte="loop_passivo")
+                    salvar_na_memoria(
+                        reflexao,
+                        "reflexao",
+                        fonte="loop_passivo",
+                        metadata_extra={
+                            "observacao_bruta": texto_observado[:2000],
+                            "pensamento_origem": pensamento[:500],
+                        },
+                    )
             else:
                 log("Texto ilegível — pulando salvamento no ChromaDB.")
 
@@ -748,7 +763,15 @@ def main():
                     with open(DIARIO_FILE, "a", encoding="utf-8") as f:
                         f.write(f"\n### {datetime.now().strftime('%d/%m/%Y %H:%M')}\n{entrada}\n")
                     if not pular_salvamento:
-                        salvar_na_memoria(f"Diário: {entrada}", "diario", fonte="loop_passivo")
+                        salvar_na_memoria(
+                            entrada,
+                            "diario",
+                            fonte="loop_passivo",
+                            metadata_extra={
+                                "observacao_bruta": texto_observado[:2000],
+                                "pensamento_origem": pensamento[:500],
+                            },
+                        )
                     log("Entrada do diário registrada.")
                     ciclos_desde_diario = 0
                     self_model, diary_entry_count = _refresh_self_model(

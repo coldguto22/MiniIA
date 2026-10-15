@@ -9,6 +9,7 @@ try:
 except ImportError:  # pragma: no cover - dependency is added in requirements
     yaml = None
 
+from .models.mamba_model import MambaModel
 from .models.ollama_model import OllamaModel
 
 DEFAULT_MODEL_CONFIG: dict[str, Any] = {
@@ -97,4 +98,5 @@ def build_model_for(role: str, config_path: str | Path | None = None):
     model_name = role_config.get("model")
     fallback = role_config.get("fallback")
     options = {key: value for key, value in role_config.items() if key not in {"model", "fallback"}}
-    return OllamaModel(model_name=model_name, fallback_model=fallback, **options)
+    model_class = MambaModel if role_config.get("provider") == "mamba" else OllamaModel
+    return model_class(model_name=model_name, fallback_model=fallback, **options)
