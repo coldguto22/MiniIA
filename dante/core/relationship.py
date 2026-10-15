@@ -83,17 +83,7 @@ def update_from_interaction(
     """
     current = now or datetime.now(timezone.utc)
 
-    # Filtro: só aceita tópicos com conteúdo substantivo (>= 5 palavras e
-    # pelo menos uma palavra longa, que costuma indicar substantivo ou verbo).
-    import re
-    def _eh_substantivo(topico: str) -> bool:
-        palavras = re.findall(r"\w+", topico, flags=re.UNICODE)
-        if len(palavras) < 5:
-            return False
-        return any(len(p) >= 6 for p in palavras)
-
-    candidatos = list(topics or [])
-    substantivos = [t for t in candidatos if _eh_substantivo(t)]
+    substantivos = [str(topic).strip() for topic in (topics or []) if str(topic).strip()]
 
     # Sem tópico substantivo, preserva o perfil anterior intacto.
     if substantivos:

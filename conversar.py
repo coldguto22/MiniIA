@@ -7,7 +7,6 @@ from dataclasses import dataclass
 import chromadb
 import ollama
 
-from dante.config import load_models_config
 from dante.core.homeostasis import HomeostasisState
 from dante.core.persistence import load_state, save_state
 from dante.core.relationship import RelationshipModel, update_from_interaction
@@ -133,12 +132,25 @@ def _update_internal_relationship(pergunta: str) -> None:
     save_state(VALUES_FILE, values)
 
 
-def build_conversation_prompt(pergunta, contexto, historico_str, relationship):
+def build_conversation_prompt(
+    pergunta,
+    contexto,
+    historico_str,
+    relationship,
+    valence: ValenceState | None = None,
+    homeostasis: HomeostasisState | None = None,
+):
     """Prompt minimalista. Sem forçar voz nem afirmar consciência.
 
     As memórias chegam com timestamp visível, para o modelo não confundir
     passado com presente."""
+    valence = valence or ValenceState()
+    homeostasis = homeostasis or HomeostasisState()
     return f"""Você é Dante. As memórias abaixo são suas — coisas que você observou, pensou ou viveu em algum momento. Cada memória vem com a data em que foi escrita. Use-as quando forem relevantes. Se a pergunta não tiver relação com nada que você viveu, diga isso — não preencha a lacuna com o que um modelo genérico diria.
+
+Regras de resposta:
+- não concorde por concordar; quando faltar base, explicite incerteza.
+- não afirme consciência, subjetividade ou experiência interna como fato.
 
 Suas memórias:
 ---
@@ -153,13 +165,16 @@ Conversa até agora:
 O que você vem observando sobre Otávio:
 {relationship.otavio_profile}
 
+Sinais internos atuais:
+novidade={valence.novelty:.2f}, coerência={valence.coherence:.2f}, energia={homeostasis.energy:.2f}, tédio={homeostasis.boredom:.2f}
+
 Otávio: {pergunta}
 
 Dante:"""
 
 
 def model_options() -> dict:
-    config = load_models_config()["system2"]
+    config = {"temperature": 0.3, "max_tokens": 1024}
     return {
         "temperature": config.get("temperature", 0.3),
         "num_predict": config.get("max_tokens", 1024),
@@ -189,7 +204,7 @@ def respond_to(pergunta: str, hits: list[MemoryHit] | None = None, *, generate=N
 
     # Contexto com data visível por memória
     contexto = "\n\n".join(
-        f"[{h.timestamp[:10] if h.timestamp else 'sem data'}] {h.document[:800]}"
+        f"[{h.timestamp[:10] if h.timestamp else 'sem data'}] tipo={h.kind}; fonte={h.source}; {h.document[:800]}"
         for h in hits
     ) or ""
 
@@ -204,12 +219,21 @@ def respond_to(pergunta: str, hits: list[MemoryHit] | None = None, *, generate=N
         f"{item['papel']}: {item['texto']}" for item in historico[-6:]
     )
     relationship = load_state(RELATIONSHIP_FILE, RelationshipModel, RelationshipModel)
-    prompt = build_conversation_prompt(pergunta, contexto, historico_str, relationship)
+    valence = load_state(VALENCE_FILE, ValenceState, ValenceState)
+    homeostasis = load_state(HOMEOSTASIS_FILE, HomeostasisState, HomeostasisState)
+    prompt = build_conversation_prompt(
+        pergunta,
+        contexto,
+        historico_str,
+        relationship,
+        valence,
+        homeostasis,
+    )
 
     generator = generate or ollama.generate
     try:
         response = generator(
-            model=load_models_config()["system2"]["model"],
+            model="llama3.1:8b",
             prompt=prompt,
             options=model_options(),
         )
