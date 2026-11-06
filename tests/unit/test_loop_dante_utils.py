@@ -22,3 +22,13 @@ def test_parece_recusa_detecta_padrao():
 @pytest.mark.unit
 def test_parece_recusa_aceita_texto_normal():
     assert loop_dante.parece_recusa("Hoje observei em silencio e refleti sobre o que vi") is False
+
+
+@pytest.mark.unit
+def test_limitar_texto_modelo_remove_repeticao_e_limita_embedding():
+    texto = "Dante: Eu não sei. Dante: Eu não sei. Dante: Eu não sei."
+
+    resultado = loop_dante._limitar_texto_modelo(texto, 40)
+
+    assert resultado == "Dante: Eu não sei."
+    assert len(resultado) <= 40

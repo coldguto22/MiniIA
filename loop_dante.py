@@ -26,6 +26,7 @@ CYCLES_PARA_DIARIO = 5
 THRESHOLD_SIMILARIDADE = 0.7
 TOP_N_MEMORIAS = 5
 MAX_CHARS_EMBEDDING = 4000
+MAX_CHARS_EMBEDDING_INPUT = 1200
 MAX_CHARS_MEMORIA_REFLEXAO = 300
 MAX_CHARS_CONTEXTO_REFLEXAO = 1000
 _MODEL_CONFIG = load_models_config()
@@ -45,7 +46,10 @@ CYCLES_ENTRE_PESQUISAS = 8          # Frequência mínima (a cada N ciclos)
 ULTIMO_CICLO_PESQUISA = 0           # Controle interno (não alterar)
 
 # --- Inicialização do ChromaDB (base persistente) ---
-PERSIST_DIR = os.path.join(os.path.dirname(__file__), "chroma_db")
+PERSIST_DIR = os.environ.get(
+    "DANTE_CHROMA_DIR",
+    os.path.join(os.path.dirname(__file__), "chroma_db"),
+)
 try:
     client = chromadb.PersistentClient(path=PERSIST_DIR)
     colecao = client.get_or_create_collection(
@@ -67,10 +71,38 @@ def log(mensagem):
         f.write(linha + "\n")
 
 def gerar_embedding(texto):
+    texto = _limitar_texto_modelo(texto, MAX_CHARS_EMBEDDING_INPUT)
     resp = ollama.embeddings(model="nomic-embed-text", prompt=texto)
     emb = np.array(resp["embedding"])
     emb = emb / (np.linalg.norm(emb) + 1e-10)
     return emb.tolist()
+
+
+def _limitar_texto_modelo(texto, limite):
+    """Limita texto e interrompe continuações repetitivas de modelos locais."""
+    tokens = re.findall(r"\S+", str(texto or ""))
+    if len(tokens) > 6:
+        for start in range(len(tokens)):
+            max_length = min(24, (len(tokens) - start) // 2)
+            for length in range(max_length, 2, -1):
+                if tokens[start:start + length] == tokens[start + length:start + (2 * length)]:
+                    tokens = tokens[:start + length]
+                    break
+            else:
+                continue
+            break
+    return " ".join(tokens)[:limite].strip()
+
+
+def _opcoes_observacao():
+    config = _MODEL_CONFIG["system1"]
+    return {
+        "temperature": config.get("temperature", 0.3),
+        "num_predict": min(config.get("max_tokens", 128), 128),
+        "repeat_penalty": config.get("repeat_penalty", 1.15),
+        "repeat_last_n": config.get("repeat_last_n", 128),
+        "stop": ["\nDante:", "\nOtávio:", "\nVocê:"],
+    }
 
 def texto_e_ruido(texto):
     """
@@ -125,7 +157,11 @@ def tela_mudou(hash_anterior):
 def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOLD_SIMILARIDADE):
     if colecao is None:
         return []
-    emb = gerar_embedding(texto)
+    try:
+        emb = gerar_embedding(texto)
+    except Exception as exc:
+        log(f"Erro ao gerar embedding da observação: {exc}")
+        return []
     resultados = colecao.query(
         query_embeddings=[emb],
         n_results=top_n,
@@ -392,18 +428,27 @@ Texto extraído da tela:
 
 Dante (em português, primeira pessoa, 3-4 frases):"""
             try:
-                resp_pensamento = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt_pensamento)
+                resp_pensamento = ollama.generate(
+                    model=MODELO_OBSERVACAO,
+                    prompt=prompt_pensamento,
+                    options=_opcoes_observacao(),
+                )
                 pensamento = resp_pensamento['response'].strip()
             except Exception as e:
                 log(f"Mamba falhou: {e}. Usando fallback Qwen.")
                 try:
-                    resp_pensamento = ollama.generate(model=_MODEL_CONFIG["system1"]["fallback"], prompt=prompt_pensamento)
+                    resp_pensamento = ollama.generate(
+                        model=_MODEL_CONFIG["system1"]["fallback"],
+                        prompt=prompt_pensamento,
+                        options=_opcoes_observacao(),
+                    )
                     pensamento = resp_pensamento['response'].strip()
                 except Exception as fallback_error:
                     log(f"Fallback Qwen também falhou: {fallback_error}")
                     pensamento = ""
             if len(pensamento) < 10:
                 pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."
+            pensamento = _limitar_texto_modelo(pensamento, MAX_CHARS_EMBEDDING_INPUT)
             log(f"Pensamento: {pensamento[:100]}...")
 
             # 4. Buscar memórias relacionadas
