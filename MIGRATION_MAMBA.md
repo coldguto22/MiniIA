@@ -6,6 +6,21 @@ O Dante usa dois modelos em pipeline: um modelo rápido para observação imedia
 
 Este documento registra a adoção da Camada 1 da estratégia proposta: substituir o System 1 por um Mamba via Ollama, mantendo o comportamento do restante do sistema e preservando fallback para Qwen quando o Mamba não estiver disponível.
 
+## Contexto acadêmico da Fatec
+
+Este protótipo integra a entrega acadêmica do projeto **Dante-Mamba**, apresentada como uma pesquisa experimental sobre continuidade de estado em agentes de IA locais. A proposta parte de uma pergunta operacional: um estado de inferência persistente pode melhorar a continuidade funcional do Dante sem depender exclusivamente da recuperação vetorial do ChromaDB?
+
+O escopo acadêmico não afirma consciência artificial. Ele busca produzir evidências reproduzíveis sobre retenção temporal, consistência de prioridades, latência, uso de RAM/VRAM, recuperação após reinício e isolamento entre sessões. O Lean Canvas associado identifica como público pesquisadores de ML e agentes, desenvolvedores de IA local e laboratórios acadêmicos; a vantagem do Dante é combinar OCR, diário, ChromaDB e ciclos reais de observação.
+
+As condições experimentais previstas são:
+
+1. Transformer com RAG como baseline;
+2. Mamba com reset a cada ciclo;
+3. Mamba com estado persistente;
+4. Mamba persistente com burn-in contextual.
+
+Esta entrega implementa a base segura para as condições 2 e 3. O burn-in, os benchmarks comparativos e a integração do estado ao loop principal permanecem como etapas posteriores. Todos os resultados devem ser descritos como continuidade funcional observada, sem extrapolação para individualidade ontológica ou consciência.
+
 ## Passos de migração
 
 1. Configurar a camada de modelos em `config/models.yaml`.
@@ -35,12 +50,17 @@ Este documento registra a adoção da Camada 1 da estratégia proposta: substitu
 ## Estado atual da migração
 
 - O suporte arquitetural para Mamba foi preservado via `dante/models/mamba_model.py` e `dante/config.py`.
-- A implementação permanece compatível e pronta para uma troca futura de modelo sem mexer no loop principal.
+- `dante/models/stateful.py` fornece um contrato plugável e `ModelSession` para uma trajetória isolada por sessão.
+- `dante/models/checkpoint.py` persiste checkpoints versionados, atômicos e protegidos por checksum.
+- O adapter Ollama implementa `generate_with_state()` usando `context`; esse valor é classificado como `ollama-context`, não como estado recorrente interno do Mamba.
+- Reset, restauração e incompatibilidades de sessão/modelo/backend são testados sem depender de um modelo local real.
+- O loop principal permanece inalterado; o protótipo ainda não ativa estado persistente em produção.
 - A configuração não deve apontar para o Mamba quebrado em ambiente de produção; o uso real do modelo precisa de um pacote válido do Ollama ou de um arquivo GGUF compatível com a versão do runtime do Ollama.
 
 ## Próximos passos
 
-- Camada 2: controlar e persistir o estado recorrente do Mamba.
+- Integrar burn-in com memórias selecionadas, mantendo a comparação entre estado zerado, persistente e aquecido.
+- Validar um backend que exponha o estado recorrente interno do Mamba, além do contexto do Ollama.
 - Camada 3: combinar Mamba com atenção e um pipeline de passagem de estado do System 1 para o System 2.
 - Explorar benchmarks comparativos em `benchmarks/compare_system1.py` para quantificar ganhos reais de latência e qualidade.
 

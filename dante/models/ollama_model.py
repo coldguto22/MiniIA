@@ -8,6 +8,8 @@ from .base import BaseModel
 
 
 class OllamaModel(BaseModel):
+    backend = "ollama"
+
     def __init__(
         self,
         model_name: str,
@@ -30,7 +32,7 @@ class OllamaModel(BaseModel):
             return False
 
     async def generate(self, prompt: str, **kwargs: Any) -> str:
-        payload = {**self.kwargs, **kwargs}
+        payload = self._generation_payload(kwargs)
         response = self.client.generate(model=self.model_name, prompt=prompt, **payload)
         if isinstance(response, dict):
             if "response" in response:
@@ -40,7 +42,8 @@ class OllamaModel(BaseModel):
         return str(response).strip()
 
     async def stream(self, prompt: str, **kwargs: Any) -> AsyncIterator[str]:
-        payload = {**self.kwargs, **kwargs, "stream": True}
+        payload = self._generation_payload(kwargs)
+        payload["stream"] = True
         try:
             response = self.client.generate(model=self.model_name, prompt=prompt, **payload)
             if not hasattr(response, "__iter__"):
@@ -51,3 +54,15 @@ class OllamaModel(BaseModel):
                     yield text
         except Exception:
             return
+
+    def _generation_payload(self, overrides: dict[str, Any]) -> dict[str, Any]:
+        values = {**self.kwargs, **overrides}
+        options = dict(values.pop("options", {}) or {})
+        if "max_tokens" in values:
+            options["num_predict"] = values.pop("max_tokens")
+        for key in ("temperature", "num_ctx"):
+            if key in values:
+                options[key] = values.pop(key)
+        if options:
+            values["options"] = options
+        return values

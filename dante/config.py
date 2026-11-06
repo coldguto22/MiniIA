@@ -14,10 +14,10 @@ from .models.ollama_model import OllamaModel
 DEFAULT_MODEL_CONFIG: dict[str, Any] = {
     "system1": {
         "provider": "ollama",
-        "model": "hf.co/mradermacher/mamba-2.8b-slimpj-hf-GGUF",
+        "model": "qwen2.5:3b",
         "fallback": "qwen2.5:3b",
         "max_tokens": 512,
-        "temperature": 0.7,
+        "temperature": 0.3,
     },
     "system2": {
         "provider": "ollama",
@@ -62,13 +62,16 @@ def load_models_config(config_path: str | Path | None = None) -> dict[str, Any]:
 
 def build_model_for(role: str, config_path: str | Path | None = None):
     config = load_models_config(config_path=config_path)
-    role_config = config.get(role, config.get("system1"))
+    if role not in ("system1", "system2"):
+        raise ValueError(f"Papel de modelo desconhecido: {role}")
+    role_config = config[role]
     model_name = role_config.get("model")
     fallback = role_config.get("fallback")
+    options = {key: value for key, value in role_config.items() if key not in {"model", "fallback", "provider"}}
 
-    if role == "system1":
+    if role_config.get("provider") == "mamba":
         from .models.mamba_model import MambaModel
 
-        return MambaModel(model_name=model_name, fallback_model=fallback, **role_config)
+        return MambaModel(model_name=model_name, fallback_model=fallback, **options)
 
-    return OllamaModel(model_name=model_name, fallback_model=fallback, **role_config)
+    return OllamaModel(model_name=model_name, fallback_model=fallback, **options)
