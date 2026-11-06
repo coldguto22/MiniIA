@@ -8,8 +8,6 @@ from .base import BaseModel
 
 
 class OllamaModel(BaseModel):
-    backend = "ollama"
-
     def __init__(
         self,
         model_name: str,
@@ -32,7 +30,7 @@ class OllamaModel(BaseModel):
             return False
 
     async def generate(self, prompt: str, **kwargs: Any) -> str:
-        payload = self._generation_payload(kwargs)
+        payload = self._build_payload(kwargs)
         response = self.client.generate(model=self.model_name, prompt=prompt, **payload)
         if isinstance(response, dict):
             if "response" in response:
@@ -42,7 +40,7 @@ class OllamaModel(BaseModel):
         return str(response).strip()
 
     async def stream(self, prompt: str, **kwargs: Any) -> AsyncIterator[str]:
-        payload = self._generation_payload(kwargs)
+        payload = self._build_payload(kwargs)
         payload["stream"] = True
         try:
             response = self.client.generate(model=self.model_name, prompt=prompt, **payload)
@@ -55,14 +53,14 @@ class OllamaModel(BaseModel):
         except Exception:
             return
 
-    def _generation_payload(self, overrides: dict[str, Any]) -> dict[str, Any]:
+    def _build_payload(self, overrides: dict[str, Any]) -> dict[str, Any]:
+        """Translate the project model options to Ollama's current API."""
         values = {**self.kwargs, **overrides}
         options = dict(values.pop("options", {}) or {})
         if "max_tokens" in values:
             options["num_predict"] = values.pop("max_tokens")
-        for key in ("temperature", "num_ctx"):
-            if key in values:
-                options[key] = values.pop(key)
+        if "temperature" in values:
+            options["temperature"] = values.pop("temperature")
         if options:
             values["options"] = options
         return values

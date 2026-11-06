@@ -25,3 +25,23 @@ def test_generate_returns_string():
 def test_health_check_true_when_client_lists_models():
     model = OllamaModel(model_name="llama3.1:8b", client=FakeClient())
     assert model.health_check() is True
+
+
+@pytest.mark.unit
+def test_model_options_use_ollama_options_payload():
+    calls = []
+
+    class CapturingClient(FakeClient):
+        def generate(self, model, prompt, **kwargs):
+            calls.append(kwargs)
+            return {"response": "ok"}
+
+    model = OllamaModel(
+        model_name="mamba",
+        client=CapturingClient(),
+        max_tokens=64,
+        temperature=0.3,
+    )
+    asyncio.run(model.generate("teste"))
+
+    assert calls == [{"options": {"num_predict": 64, "temperature": 0.3}}]
