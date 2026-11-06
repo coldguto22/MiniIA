@@ -1,11 +1,13 @@
+import asyncio
 import os
 
 import pytest
 
 import ollama
+from dante.config import build_model_for, load_models_config
 
 
-def _has_model(model_name: str) -> bool:
+def _installed_model_names() -> set[str]:
     try:
         response = ollama.list()
     except Exception as exc:
@@ -23,28 +25,31 @@ def _has_model(model_name: str) -> bool:
         )
         if name:
             names.add(str(name))
-    return model_name in names
+    return names
 
 
 @pytest.mark.integration
 @pytest.mark.ollama
-def test_llama_gera_reflexao_curta_quando_habilitado():
+@pytest.mark.parametrize("role", ["system1", "system2"])
+def test_modelos_configurados_geram_resposta_curta_no_ollama(role):
     if os.getenv("RUN_OLLAMA_TESTS", "0") != "1":
-        pytest.skip("Defina RUN_OLLAMA_TESTS=1 para executar o Llama local")
-    if not _has_model("llama3.1:8b"):
-        pytest.skip("Modelo llama3.1:8b não está instalado no Ollama")
+        pytest.skip("Defina RUN_OLLAMA_TESTS=1 para executar modelos locais")
+
+    model_name = load_models_config()[role]["model"]
+    if model_name not in _installed_model_names():
+        pytest.skip(f"Modelo {model_name} não está instalado no Ollama")
 
     try:
-        response = ollama.generate(
-            model="llama3.1:8b",
-            prompt=(
+        model = build_model_for(role)
+        text = asyncio.run(
+            model.generate(
                 "Responda em português com uma única frase curta sobre como "
-                "uma memória pode mudar a interpretação de uma observação."
-            ),
-            options={"temperature": 0.1, "num_predict": 64},
+                "uma memória pode mudar a interpretação de uma observação.",
+                max_tokens=64,
+                temperature=0.1,
+            )
         )
     except Exception as exc:
-        pytest.skip(f"Llama local indisponível durante geração: {exc}")
+        pytest.fail(f"Ollama falhou ao gerar com {role} ({model_name}): {exc}")
 
-    text = response.get("response", "") if isinstance(response, dict) else str(response)
     assert len(text.strip()) >= 10

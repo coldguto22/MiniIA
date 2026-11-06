@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import chromadb
 import ollama
 
+from dante.config import load_models_config
 from dante.core.homeostasis import HomeostasisState
 from dante.core.persistence import load_state, save_state
 from dante.core.relationship import RelationshipModel, update_from_interaction
@@ -233,7 +234,7 @@ def respond_to(pergunta: str, hits: list[MemoryHit] | None = None, *, generate=N
     generator = generate or ollama.generate
     try:
         response = generator(
-            model="llama3.1:8b",
+            model=load_models_config()["system2"]["model"],
             prompt=prompt,
             options=model_options(),
         )

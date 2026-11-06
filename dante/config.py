@@ -15,16 +15,16 @@ from .models.ollama_model import OllamaModel
 DEFAULT_MODEL_CONFIG: dict[str, Any] = {
     "system1": {
         "provider": "ollama",
-        "model": "qwen2.5:3b",
+        "model": "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M",
         "fallback": None,
         "max_tokens": 512,
-        "temperature": 0.7,
+        "temperature": 0.3,
     },
     "system2": {
         "provider": "ollama",
-        "model": "llama3.1:8b",
+        "model": "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M",
         "max_tokens": 2048,
-        "temperature": 0.3,
+        "temperature": 0.7,
     },
 }
 
@@ -97,6 +97,10 @@ def build_model_for(role: str, config_path: str | Path | None = None):
     role_config = config[role]
     model_name = role_config.get("model")
     fallback = role_config.get("fallback")
-    options = {key: value for key, value in role_config.items() if key not in {"model", "fallback"}}
+    options = {
+        key: value
+        for key, value in role_config.items()
+        if key not in {"model", "fallback", "provider"}
+    }
     model_class = MambaModel if role_config.get("provider") == "mamba" else OllamaModel
     return model_class(model_name=model_name, fallback_model=fallback, **options)

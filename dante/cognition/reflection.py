@@ -1,4 +1,4 @@
-"""Reflexão longa pelo modelo System 2 (Llama via Ollama)."""
+"""Reflexão longa pelo modelo System 2 via Ollama."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from typing import Any, Callable, Iterable
 
 import ollama
 
+from dante.config import load_models_config
 from dante.core.self_model import SelfModel
 from dante.core.valence import ValenceState
 
@@ -40,7 +41,7 @@ def generate_reflection(
 ) -> str:
     """Gera reflexão longa com cliente substituível nos testes."""
     client_generate = generate or ollama.generate
-    model = "llama3.1:8b"
+    model = load_models_config()["system2"]["model"]
     response = client_generate(
         model=model,
         prompt=build_prompt(thought, memories, self_model, valence),

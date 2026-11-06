@@ -47,5 +47,8 @@ def test_two_turn_conversation_preserves_history_and_memory_provenance(tmp_path,
     assert "tipo=diario" in first_prompt
     assert "fonte=diario.md" in first_prompt
     assert first in second_prompt
-    assert all(call["model"] == "llama3.1:8b" for call in calls)
+    assert all(
+        call["model"] == "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M"
+        for call in calls
+    )
     assert all(call["options"]["temperature"] == 0.3 for call in calls)

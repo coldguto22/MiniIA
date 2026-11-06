@@ -9,8 +9,9 @@ from dante.models.ollama_model import OllamaModel
 def test_load_models_config_returns_expected_values():
     config = load_models_config()
     assert config["system1"]["provider"] == "ollama"
+    assert config["system1"]["model"] == "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M"
     assert config["system1"]["fallback"] == "qwen2.5:3b"
-    assert config["system2"]["model"] == "qwen2.5:7b"
+    assert config["system2"]["model"] == "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M"
 
 
 @pytest.mark.unit
@@ -30,7 +31,7 @@ def test_build_model_for_uses_provider_specific_adapter(tmp_path):
         "  fallback: qwen2.5:3b\n"
         "system2:\n"
         "  provider: ollama\n"
-        "  model: qwen2.5:7b\n",
+        "  model: hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M\n",
         encoding="utf-8",
     )
 
