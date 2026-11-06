@@ -51,4 +51,11 @@ def test_two_turn_conversation_preserves_history_and_memory_provenance(tmp_path,
         call["model"] == "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M"
         for call in calls
     )
-    assert all(call["options"]["temperature"] == 0.3 for call in calls)
+    assert all(call["options"]["temperature"] == 0.7 for call in calls)
+
+
+@pytest.mark.unit
+def test_repeated_model_continuation_is_trimmed():
+    text = "Dante: Eu não sei. Dante: Eu não sei. Dante: Eu não sei."
+
+    assert conversar._trim_repeated_continuation(text) == "Dante: Eu não sei."

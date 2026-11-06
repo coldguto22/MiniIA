@@ -4,8 +4,12 @@ system1:
   fallback: "qwen2.5:3b"
   max_tokens: 512
   temperature: 0.3      # era 0.7 — observação deve ser estável
+  repeat_penalty: 1.15
+  repeat_last_n: 128
 system2:
   provider: ollama
   model: "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M"
   max_tokens: 2048
   temperature: 0.7      # era 0.3 — reflexão se beneficia de diversidade
+  repeat_penalty: 1.15
+  repeat_last_n: 256

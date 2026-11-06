@@ -1,6 +1,7 @@
 # conversar.py
 """Chat contínuo com Dante, ancorado apenas nas memórias persistidas."""
 import os
+import re
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -175,11 +176,30 @@ Dante:"""
 
 
 def model_options() -> dict:
-    config = {"temperature": 0.3, "max_tokens": 1024}
+    config = load_models_config().get("system2", {})
     return {
         "temperature": config.get("temperature", 0.3),
         "num_predict": config.get("max_tokens", 1024),
+        "repeat_penalty": config.get("repeat_penalty", 1.15),
+        "repeat_last_n": config.get("repeat_last_n", 256),
+        "stop": ["\nOtávio:", "\nDante:", "\nVocê:"],
     }
+
+
+def _trim_repeated_continuation(text: str) -> str:
+    """Stops pathological repeated n-grams produced by local models."""
+    tokens = re.findall(r"\S+", text)
+    if len(tokens) < 6:
+        return text.strip()
+
+    for start in range(len(tokens)):
+        max_length = min(24, (len(tokens) - start) // 2)
+        for length in range(max_length, 2, -1):
+            first = tokens[start : start + length]
+            second = tokens[start + length : start + (2 * length)]
+            if first == second:
+                return " ".join(tokens[: start + length]).strip()
+    return text.strip()
 
 
 def _parece_recusa(texto: str) -> bool:
@@ -244,7 +264,7 @@ def respond_to(pergunta: str, hits: list[MemoryHit] | None = None, *, generate=N
             raw_text = response.get("response", "") or ""
         else:
             raw_text = ""
-        text = normalize_text(raw_text, max_chars=3000)
+        text = normalize_text(_trim_repeated_continuation(raw_text), max_chars=3000)
     except Exception as exc:
         import traceback
         print(f"[conversar] Erro ao gerar: {exc}\n{traceback.format_exc()}")
