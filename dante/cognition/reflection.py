@@ -6,6 +6,7 @@ from typing import Any, Callable, Iterable
 
 import ollama
 
+from dante.config import load_models_config
 from dante.core.self_model import SelfModel
 from dante.core.valence import ValenceState
 
@@ -24,7 +25,6 @@ def build_prompt(
         "Diferencie observação, inferência e incerteza. "
         "Não se apresente como assistente nem proponha recompensas ou tarefas.\n"
         f"Auto-modelo: {self_model.identity_summary}\n"
-        f"Sinais internos: {valence or ValenceState()}\n"
         f"Memórias:\n{context or 'Nenhuma memória relacionada.'}\n\n"
         f"Pensamento:\n{thought[:500]}\n\nReflexão:"
     )
@@ -40,7 +40,7 @@ def generate_reflection(
 ) -> str:
     """Gera reflexão longa com cliente substituível nos testes."""
     client_generate = generate or ollama.generate
-    model = "llama3.1:8b"
+    model = load_models_config()["system1"]["model"]
     response = client_generate(
         model=model,
         prompt=build_prompt(thought, memories, self_model, valence),

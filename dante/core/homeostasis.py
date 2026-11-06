@@ -42,7 +42,7 @@ class HomeostasisState:
 
 
 def decay(state: HomeostasisState, *, cycles: int = 1, now: datetime | None = None,
-          energy_decay: float = 0.01, boredom_growth: float = 0.02) -> HomeostasisState:
+          energy_decay: float = 0.01, boredom_growth: float = 0.008) -> HomeostasisState:
     """Diminui energia e aumenta tédio conforme ciclos passam sem novidade."""
     steps = max(0, int(cycles))
     return HomeostasisState(

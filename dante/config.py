@@ -22,7 +22,8 @@ DEFAULT_MODEL_CONFIG: dict[str, Any] = {
     },
     "system2": {
         "provider": "ollama",
-        "model": "llama3.1:8b",
+        "model": "qwen2.5:7b",
+        "fallback": None,
         "max_tokens": 2048,
         "temperature": 0.3,
     },

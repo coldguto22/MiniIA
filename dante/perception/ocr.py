@@ -14,7 +14,7 @@ def preprocess(image: Any, *, scale: int = 2, sharpness: float = 1.5) -> Any:
     return ImageEnhance.Sharpness(enlarged).enhance(sharpness).convert("L")
 
 
-def extract_text(image: Any, *, language: str = "por", config: str = "--psm 6",
+def extract_text(image: Any, *, language: str = "por+eng", config: str = "--psm 6",
                  preprocess_image: bool = True) -> str:
     """Extrai texto da imagem; Tesseract é carregado somente quando necessário."""
     import pytesseract
