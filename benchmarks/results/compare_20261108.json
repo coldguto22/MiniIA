@@ -1,0 +1,296 @@
+{
+  "generated_at": "2026-11-08T22:18:59Z",
+  "config": {
+    "system1": {
+      "provider": "ollama",
+      "model": "qwen2.5:3b",
+      "fallback": null,
+      "max_tokens": 512,
+      "temperature": 0.3,
+      "repeat_penalty": 1.15,
+      "repeat_last_n": 128
+    },
+    "system2": {
+      "provider": "ollama",
+      "model": "llama3.1:8b",
+      "max_tokens": 2048,
+      "temperature": 0.7,
+      "repeat_penalty": 1.15,
+      "repeat_last_n": 256
+    }
+  },
+  "benchmark_models": {
+    "qwen": "qwen2.5:3b",
+    "mamba": "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M"
+  },
+  "systems": {
+    "qwen": {
+      "model": "qwen2.5:3b",
+      "results": [
+        {
+          "prompt": "Explique em duas frases por que a observação contínua ajuda uma IA a lembrar contexto.",
+          "response": "A observação contínua permite que a IA colete e armazene dados e informações sobre o contexto em que as interações ocorrem, permitindo que ela se adapte e generalize melhor para novas situações sem necessariamente ser programada para cada cenário específico. Isso ajuda a criar um modelo de IA mais robusto e versátil, capaz de lembrar e aplicar o contexto de maneira eficaz.",
+          "elapsed_sec": 1.389190999994753,
+          "tokens": 62
+        },
+        {
+          "prompt": "Descreva uma rotina de trabalho eficiente para um time de engenharia de IA.",
+          "response": "Criar uma rotina de trabalho eficiente para um time de engenharia de IA envolve várias etapas e práticas. Aqui está uma sugestão de rotina que pode ser adaptada para atender às necessidades específicas do seu time:\n\n1. **Planejamento Diário**: Comece cada dia com um planejamento diário. Este deve incluir uma revisão do backlog de tarefas, a definição de prioridades para o dia e a atribuição de tarefas. Este processo deve ser realizado em conjunto para garantir que todos estejam cientes das responsabilidades",
+          "elapsed_sec": 1.3045042000012472,
+          "tokens": 82
+        },
+        {
+          "prompt": "Escreva um resumo curto de um artigo sobre memória de longo prazo em modelos de linguagem.",
+          "response": "Peço desculpas pela confusão, mas parece que você solicitou um resumo de um artigo específico sobre memória de longo prazo em modelos de linguagem, mas não forneceu o título ou o conteúdo do artigo. Como assistente de inteligência artificial, eu não tenho acesso a um banco de dados específico de artigos acadêmicos ou científicos. No entanto, posso fornecer uma visão geral geral sobre o tema solicitado.\n\nA memória de longo prazo em modelos de linguagem refere-se à capacidade desses modelos de armazenar e recuperar",
+          "elapsed_sec": 1.2910896000103094,
+          "tokens": 84
+        },
+        {
+          "prompt": "Dê um exemplo de prompt útil para avaliar coerência em respostas curtas.",
+          "response": "Claro! Aqui está um exemplo de prompt útil para avaliar a coerência em respostas curtas:\n\n\"Você acabou de responder uma pergunta sobre como preparar um prato de macarrão. Como a resposta está coerente com a pergunta original e faz sentido em termos de instruções de preparo?\"\n\nEsta pergunta permite verificar se a resposta atende à pergunta original de maneira coerente e se as instruções de preparo são claras e sensatas.",
+          "elapsed_sec": 1.0934966999921016,
+          "tokens": 70
+        },
+        {
+          "prompt": "Explique o que é isolamento do modelo em um sistema multi-agente.",
+          "response": "O isolamento do modelo em um sistema multi-agente é uma abordagem que visa garantir que cada agente em um sistema multi-agente (ou seja, um sistema que envolve múltiplos agentes interconectados) pode operar de forma independente e sem interferência dos outros agentes. Isso é crucial para garantir que cada agente possa realizar suas tarefas de maneira eficaz e eficiente, sem ser afetado por ações dos outros agentes.\n\nNo contexto de sistemas multi-agente, cada agente pode ter seu próprio modelo mental que descreve",
+          "elapsed_sec": 1.306598600000143,
+          "tokens": 81
+        },
+        {
+          "prompt": "Crie uma frase criativa sobre uma estação do ano e um editor de código.",
+          "response": "\"Como um editor de código, você pode refatorar o código quente do verão, garantindo que seu projeto esteja sempre em versão estável, preparando-o para as incertezas do outono e inverno vindos.\"",
+          "elapsed_sec": 0.696341000002576,
+          "tokens": 31
+        },
+        {
+          "prompt": "Como você descreveria a diferença entre atenção e estado recorrente em LLMs?",
+          "response": "Em LLMs (Linguistic Large-Models), atenção e estado recorrente são conceitos importantes que desempenham papéis diferentes na processamento de linguagem natural.\n\n**Atenção**:\nA atenção é uma técnica de aprendizado profundo que permite que o modelo se concentre em diferentes partes do input ao processá-lo. Ela é especialmente útil para tarefas que envolvem processamento de texto, como tradução, geração de texto, entre outras. A atenção permite que o modelo \"olhe\" para diferentes partes do input e dê-lhes pesos diferentes, o que significa",
+          "elapsed_sec": 1.303853599994909,
+          "tokens": 80
+        },
+        {
+          "prompt": "Escreva um texto técnico sobre embeddings e recuperação por similaridade.",
+          "response": "### Embeddings e Recuperação por Similaridade: Uma Abordagem Técnica\n\n#### Introdução\n\nEm ambientes de aprendizado de máquina e inteligência artificial, a recuperação por similaridade é uma técnica fundamental para encontrar objetos ou entidades semelhantes em grandes conjuntos de dados. Embryos, ou embeddings, são representações vetoriais de dados que permitem a comparação e a classificação de dados complexos, como texto, imagens e sinais de áudio. Este texto abordará a concepção e aplicação de embeddings e a recuperação",
+          "elapsed_sec": 1.3447512999991886,
+          "tokens": 76
+        },
+        {
+          "prompt": "Responda em português em três frases sobre um cenário de automação doméstica.",
+          "response": "Em um cenário de automação doméstica, a luz da sala pode ser acionada automaticamente quando o sensor de presença detecta movimento, economizando energia e garantindo que a área esteja sempre iluminada quando alguém estiver por perto. O aquecimento da casa pode ser regulado de acordo com a temperatura ambiente e a presença de pessoas, permitindo que a temperatura seja mantida confortavelmente sem a necessidade de ajustes constantes. Além disso, os dispositivos de segurança podem ser ativados automaticamente quando a porta ou janela da casa é aberta, garantindo a",
+          "elapsed_sec": 1.2985483999946155,
+          "tokens": 88
+        },
+        {
+          "prompt": "Explique por que benchmarks devem incluir latência e qualidade em conjunto.",
+          "response": "Os benchmarks devem considerar tanto a latência quanto a qualidade em conjunto por várias razões importantes:\n\n1. Latência é um fator crucial: A latência é a demora entre a solicitação de um serviço e a recepção da resposta. Ela é um indicador direto da eficiência do sistema. Por exemplo, em um sistema de banco de dados, uma alta latência pode significar que as operações de busca ou atualização de dados estão demorando muito, o que pode levar a uma experiência de usuário ruim.\n\n2. Qualidade de serviço (QoS) é",
+          "elapsed_sec": 1.2956336000061128,
+          "tokens": 89
+        },
+        {
+          "prompt": "Crie uma mensagem curta para um usuário que acabou de começar a usar um assistente local.",
+          "response": "Olá! Parabéns por começar a usar o assistente local! Estou tudo bem? Estou precisando de alguma ajuda ou tem alguma dúvida? Estou pronto para explorar as muitas funcionalidades que o assistente tem para oferecer. Estou pronto para fazer o seu melhor? Estou aqui!",
+          "elapsed_sec": 0.7970560999820009,
+          "tokens": 43
+        },
+        {
+          "prompt": "Descreva em 2 linhas o trade-off entre velocidade e profundidade de raciocínio.",
+          "response": "Velocidade de raciocínio pode ser obtida com algoritmos simplificados e heurísticos, enquanto a profundidade de raciocínio requer algoritmos mais complexos e computacionalmente intensivos, o que pode levar a resultados mais precisos mas demorados.",
+          "elapsed_sec": 0.740331300010439,
+          "tokens": 33
+        },
+        {
+          "prompt": "Quais cuidados um sistema de observação contínua deve ter com privacidade?",
+          "response": "Um sistema de observação contínua deve considerar cuidados específicos para garantir a privacidade dos usuários. Aqui estão algumas recomendações:\n\n1. **Consentimento do Usuário**: Garanta que os usuários estejam cientes de como seus dados serão usados e consintam antes de o sistema recolher e analisar dados pessoais.\n\n2. **Análise de Dados**: Implemente técnicas de anonimização e pseudonimização para proteger a identidade dos usuários. Isso pode incluir a remoção de informações pessoais ou",
+          "elapsed_sec": 1.3306404000031762,
+          "tokens": 71
+        },
+        {
+          "prompt": "Escreva uma pergunta útil para avaliar a capacidade de reflexão de uma IA.",
+          "response": "Como você avaliaria a eficácia de uma IA em tomar decisões baseadas em informações passadas, considerando tanto os benefícios quanto os riscos potenciais, e como essa IA poderia ser usada para promover o bem-estar coletivo?",
+          "elapsed_sec": 0.7217534999945201,
+          "tokens": 35
+        },
+        {
+          "prompt": "Descreva uma experiência de uso de um diário humano em um sistema de IA.",
+          "response": "Como assistente de inteligência artificial, eu não tenho a capacidade de usar um diário humano ou experimentar diretamente um sistema de IA. No entanto, posso descrever uma experiência hipotética de uso de um diário humano em um sistema de IA.\n\nImagine que você, um usuário de um sistema de IA, deseja manter um diário. Você decide criar um diário humano, onde você pode escrever suas reflexões, pensamentos e experiências. Você então decide usar um sistema de IA para ajudar a organizar e analisar essas informações.\n\nPrimeiro, você cria",
+          "elapsed_sec": 1.328417000011541,
+          "tokens": 88
+        },
+        {
+          "prompt": "Explique em poucas palavras o que é um state space model.",
+          "response": "Um state space model é uma representação matemática que descreve um sistema dinâmico em termos de estados, estados-iniciais e funções de transição. Ele é usado para modelar sistemas onde a informação é obtida através de observações que não são diretamente relacionadas aos estados do sistema. Este modelo é fundamental em controle de sistemas e processos estocásticos.",
+          "elapsed_sec": 0.913029200019082,
+          "tokens": 56
+        },
+        {
+          "prompt": "Crie uma resposta curta para uma tela de dashboard de produtividade.",
+          "response": "\"Produtividade: 95/100 - Atividades concluídas: 45 - Tempo gasto: 48h\"",
+          "elapsed_sec": 0.5218332000076771,
+          "tokens": 10
+        },
+        {
+          "prompt": "Escreva uma observação reflexiva sobre rotina, atenção e memória.",
+          "response": "Como assistente de inteligência artificial, eu não tenho uma rotina pessoal, atenção ou memória como seres humanos. No entanto, posso compartilhar uma observação reflexiva baseada em dados e estudos sobre esses aspectos humanos.\n\nA rotina é uma parte essencial da vida humana. Ela permite que as tarefas se tornem mais fáceis e menos estressantes. A rotina ajuda a criar um padrão de comportamento que pode ser seguido diariamente, facilitando a memória e a atenção. \n\nA atenção, por",
+          "elapsed_sec": 1.3135580999951344,
+          "tokens": 77
+        },
+        {
+          "prompt": "Explique por que um fallback é importante em um pipeline de modelos locais.",
+          "response": "Um fallback é uma estratégia crucial em um pipeline de modelos locais, especialmente quando se trata de garantir a consistência e a eficiência do sistema. Aqui estão alguns motivos pelos quais um fallback é importante:\n\n1. **Garantia de Robustez**: Em um ambiente de produção, é comum que ocorram falhas ou erros inesperados. Um fallback permite que o sistema continue operando de maneira eficiente mesmo em situações de falha, sem precisar de um modelo de modelo de aprendizado de máquina (ML) que não esteja disponível ou não esteja funcionando",
+          "elapsed_sec": 1.2842135999817401,
+          "tokens": 88
+        },
+        {
+          "prompt": "Resuma em duas frases como o contexto pode melhorar respostas de IA.",
+          "response": "O contexto fornecido permite que a IA compreenda melhor o contexto da pergunta ou tópico, o que ajuda a fornecer respostas mais precisas e relevantes.",
+          "elapsed_sec": 0.5599745000072289,
+          "tokens": 25
+        }
+      ],
+      "summary": {
+        "p50_ms": 1295.6336000061128,
+        "p95_ms": 1389.190999994753,
+        "throughput_tokens_per_s": 58.11819361928762,
+        "avg_response_tokens": 63.45
+      }
+    },
+    "mamba": {
+      "model": "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M",
+      "results": [
+        {
+          "prompt": "Explique em duas frases por que a observação contínua ajuda uma IA a lembrar contexto.",
+          "response": "A:\n\nA resposta do @Juan é muito boa, mas acho que vale a pena dar uma resposta mais detalhada.\nAo contrário do que diz o @Juan, a observação contínua não é necessária para lembrar contexto.\nA observação contínua é útil para lembrar contexto porque ela permite que a IA tenha acesso a informações que não estão disponíveis na memória.\nPor exemplo, se a IA precisa de",
+          "elapsed_sec": 1.5018723999965005,
+          "tokens": 66
+        },
+        {
+          "prompt": "Descreva uma rotina de trabalho eficiente para um time de engenharia de IA.",
+          "response": "## Problema\n\nDescreva o problema que você está tentando resolver.\n\n## Resposta\n\nDescreva sua solução.\n\n## Exemplo\n\nUm exemplo de como resolver o problema.\n\n## Referências\n\n- [ ] [Referência 1](https://pt.stackoverflow.com/a/121263/36)\n- [ ] [Referência 2](https://pt.stackoverflow.com/a/121263/36)\n- [ ] [Referência 3](https://",
+          "elapsed_sec": 1.5099825999932364,
+          "tokens": 41
+        },
+        {
+          "prompt": "Escreva um resumo curto de um artigo sobre memória de longo prazo em modelos de linguagem.",
+          "response": "A:\n\nA resposta do @Juan é muito boa, mas eu quero acrescentar algumas coisas.\nA memória de longo prazo é uma capacidade do cérebro que permite que a mente conserve informações que não estão sendo processadas no momento. Isso é útil para a capacidade de aprendizagem, pois a mente pode memorizar informações que não estão sendo processadas, mas que são necessárias para a aprendizagem.\nA capacidade de memória",
+          "elapsed_sec": 1.4876641999871936,
+          "tokens": 68
+        },
+        {
+          "prompt": "Dê um exemplo de prompt útil para avaliar coerência em respostas curtas.",
+          "response": "A:\n\nAcho que o que você precisa é de um teste de coerência.\nO que você precisa é de um teste de coerência.\n\nA:\n\nAcho que o que você precisa é de um teste de coerência.\n\nA:\n\nAcho que o que você precisa é de um teste de coerência.\n\nA:\n\nEu acho que o que você precisa é de um teste de coerência.\n\nA:\n\nEu acho que o que você precisa",
+          "elapsed_sec": 1.5003563000063878,
+          "tokens": 71
+        },
+        {
+          "prompt": "Explique o que é isolamento do modelo em um sistema multi-agente.",
+          "response": "A:\n\nO modelo de isolamento é um modelo de desenvolvimento de software que consiste em isolar o código de um sistema de outros sistemas, de forma a que o código de um sistema não possa interferir no código de outro sistema.\nO modelo de isolamento é usado para garantir que o código de um sistema não possa interferir no código de outro sistema, de forma a que o código de um sistema não possa ser alterado sem que o código de out",
+          "elapsed_sec": 1.5238710999838077,
+          "tokens": 82
+        },
+        {
+          "prompt": "Crie uma frase criativa sobre uma estação do ano e um editor de código.",
+          "response": "## [0.1.0] - 2020-06-08\n\n### Features\n\n- **Editor de código:** Adicionar um editor de código.\n\n### Bugfixes\n\n- **Editor de código:** Corrigir um erro de sintaxe.\n\n## [0.0.1] - 2020-06-08\n\n### Features\n\n- **Editor de código:** Adicionar um editor de código.",
+          "elapsed_sec": 1.3206703999894671,
+          "tokens": 41
+        },
+        {
+          "prompt": "Como você descreveria a diferença entre atenção e estado recorrente em LLMs?",
+          "response": "A:\n\nAtenção é uma atividade que você faz, ou seja, você está atento a algo.\nEstado Recorrente é uma atividade que você faz, ou seja, você está sempre atento a algo.\nAtenção é uma atividade que você faz, ou seja, você está atento a algo.\nEstado Recorrente é uma atividade que você faz, ou seja, você está sempre atento a algo.\nAtenção é uma atividade que você faz, ou seja, você está atento a algo.\nEst",
+          "elapsed_sec": 1.4979314999945927,
+          "tokens": 76
+        },
+        {
+          "prompt": "Escreva um texto técnico sobre embeddings e recuperação por similaridade.",
+          "response": "## Problema\n\nO problema é que, quando você usa o `similarity` para recuperar o valor de um campo, o valor é retornado como um objeto do tipo `Double`.\n\n## Resposta\n\nO `similarity` retorna um objeto do tipo `Double` porque o `similarity` é um método de `Double`.\n\n## Solução\n\nO `similarity` retorna um objeto do tipo `Double` porque o `similarity` é um método de `Double`.\n\n## Exemplo",
+          "elapsed_sec": 1.5141933000122663,
+          "tokens": 66
+        },
+        {
+          "prompt": "Responda em português em três frases sobre um cenário de automação doméstica.",
+          "response": "1. O que você faria se a automação doméstica fosse uma realidade?\n\n2. Como você faria para se adaptar a essa realidade?\n\n3. Como você faria para se adaptar a essa realidade?\n\n4. Como você faria para se adaptar a essa realidade?\n\n5. Como você faria para se adaptar a essa realidade?\n\n6. Como você faria para se adaptar a essa realidade?\n\n7. Como você faria para se adaptar a",
+          "elapsed_sec": 1.5330396999779623,
+          "tokens": 70
+        },
+        {
+          "prompt": "Explique por que benchmarks devem incluir latência e qualidade em conjunto.",
+          "response": "A:\n\nA latência é a diferença entre o tempo de execução do código e o tempo de execução do código na memória.\nA qualidade é a quantidade de dados processados por segundo.\nA latência é a diferença entre o tempo de execução do código e o tempo de execução do código na memória.\nA qualidade é a quantidade de dados processados por segundo.\nA latência é a diferença entre o tempo de execução do código e o",
+          "elapsed_sec": 1.5289459000050556,
+          "tokens": 77
+        },
+        {
+          "prompt": "Crie uma mensagem curta para um usuário que acabou de começar a usar um assistente local.",
+          "response": "## <a name=\"how-to-use-the-assistant-local-api\"></a>Como usar o API do assistente local\n\nO assistente local é um recurso que permite que o usuário interaja com o assistente através de um aplicativo local. O assistente local é um recurso que pode ser usado para acessar o assistente de forma interativa.\n\nO assistente local é um recurso que pode ser usado para acessar o assistente de forma interativa.",
+          "elapsed_sec": 1.5307212000188883,
+          "tokens": 63
+        },
+        {
+          "prompt": "Descreva em 2 linhas o trade-off entre velocidade e profundidade de raciocínio.",
+          "response": "A:\n\nAcho que a resposta é:\n\nDescreva em \n2 linhas\no trade-off entre velocidade e profundidade de raciocínio.\n\nA:\n\nAcho que a resposta é:\n\nDescreva em \n2 linhas\no trade-off entre velocidade e profundidade de raciocínio.\n\nA:\n\nDescreva em \n2 linhas\no trade-off entre velocidade e profundidade de raciocínio.",
+          "elapsed_sec": 1.4704114999913145,
+          "tokens": 49
+        },
+        {
+          "prompt": "Quais cuidados um sistema de observação contínua deve ter com privacidade?",
+          "response": "A:\n\nA questão é:\n\nComo um sistema de observação contínua pode ter privacidade?\n\nA resposta é:\n\nNão tem.\n\nO que é privacidade?\nPrivacidade é a proteção de dados pessoais.\nQuais são os dados pessoais?\nOs dados pessoais são:\n\nDados de identificação (nome, endereço, CPF, etc.)\nDados de identificação de usuário (nome de usuário, senha, etc",
+          "elapsed_sec": 1.524899700016249,
+          "tokens": 55
+        },
+        {
+          "prompt": "Escreva uma pergunta útil para avaliar a capacidade de reflexão de uma IA.",
+          "response": "## Problema\n\nDescreva o problema que você quer resolver.\n\n## Solução\n\nDescreva a solução que você encontrou.\n\n## Exemplo\n\nExemplo de uma solução.\n\n## Exemplo 2\n\nExemplo de uma solução.\n\n## Notas\n\nDescreva as notas que você considera importantes.\n\n## Referências\n\nDescreva as referências que você considera importantes.",
+          "elapsed_sec": 1.4172973000095226,
+          "tokens": 48
+        },
+        {
+          "prompt": "Descreva uma experiência de uso de um diário humano em um sistema de IA.",
+          "response": "A:\n\nAcho que a resposta mais simples é:\n\nNão.\n\nA:\n\nNão.\nAo contrário do que muitos pensam, o uso de diários humanos não é uma forma de automatizar o trabalho de um programador.\nO uso de diários humanos é uma forma de melhorar a qualidade do trabalho de um programador.\nO uso de diários humanos é uma forma de melhorar a qualidade do trabalho de um programador.\nO uso",
+          "elapsed_sec": 1.4927769000059925,
+          "tokens": 69
+        },
+        {
+          "prompt": "Explique em poucas palavras o que é um state space model.",
+          "response": "A:\n\nUm modelo de estado é um modelo matemático que representa a dinâmica de um sistema.\nUm modelo de estado é um modelo matemático que representa a dinâmica de um sistema.\nUm modelo de estado é um modelo matemático que representa a dinâmica de um sistema.\nUm modelo de estado é um modelo matemático que representa a dinâmica de um sistema.\nUm modelo de estado é um modelo matemático que representa a din",
+          "elapsed_sec": 1.4966303999826778,
+          "tokens": 73
+        },
+        {
+          "prompt": "Crie uma resposta curta para uma tela de dashboard de produtividade.",
+          "response": "## <a name=\"how-to-use-the-dashboard\"></a>Como usar o dashboard\n\n1. Crie um [projeto de aplicação](https://aka.ms/azuredevopslabs) e defina um [serviço de produção](https://aka.ms/azuredevopslabs) para o projeto.\n1. Crie um [serviço de produção](https://aka.ms/azuredevopslabs) para o projeto.\n1. Crie um [serviço",
+          "elapsed_sec": 1.4736815000069328,
+          "tokens": 34
+        },
+        {
+          "prompt": "Escreva uma observação reflexiva sobre rotina, atenção e memória.",
+          "response": "A:\n\nA rotina é uma sequência de ações que se repetem.\nA atenção é a capacidade de se concentrar em um objeto.\nA memória é a capacidade de armazenar informações.\nA rotina é a atenção e a memória.\nA rotina é a atenção e a memória.\nA rotina é a atenção e a memória.\nA rotina é a atenção e a memória.\nA rotina é a atenção e a",
+          "elapsed_sec": 1.4886334000038914,
+          "tokens": 69
+        },
+        {
+          "prompt": "Explique por que um fallback é importante em um pipeline de modelos locais.",
+          "response": "## <a name=\"what-are-the-different-kinds-of-fallbacks\"></a>Quais são as diferentes formas de fallback?\n\n### <a name=\"fallback-to-the-default-value\"></a>Fallback para o valor padrão\n\nO valor padrão é o valor que é usado quando o valor de um campo não é especificado.\n\nPor exemplo, se você especifica um campo de nome `name` e o valor de `name` não é especificado, o valor pad",
+          "elapsed_sec": 1.4802588000020478,
+          "tokens": 55
+        },
+        {
+          "prompt": "Resuma em duas frases como o contexto pode melhorar respostas de IA.",
+          "response": "A:\n\nA resposta de @Rafael é interessante, mas não é a resposta correta.\nA resposta correta é:\n\nA:\n\nA resposta correta é:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA:\n\nA",
+          "elapsed_sec": 1.4885571000049822,
+          "tokens": 42
+        }
+      ],
+      "summary": {
+        "p50_ms": 1497.9314999945927,
+        "p95_ms": 1533.0396999779623,
+        "throughput_tokens_per_s": 40.7959128821328,
+        "avg_response_tokens": 60.75
+      }
+    }
+  },
+  "summary": {
+    "qwen_p95_ms": 1389.190999994753,
+    "mamba_p95_ms": 1533.0396999779623,
+    "qwen_throughput_tokens_per_s": 58.11819361928762,
+    "mamba_throughput_tokens_per_s": 40.7959128821328
+  }
+}
