@@ -78,3 +78,16 @@ MiniIA.code-workspace
 readme.old
 CONTEXTO DO PROJETO_MiniIA_Dante.txt
 Readme.new.txt
+.dante_state
+backups
+chroma_db_a2_recovered
+dante\relationship_model.json
+dante\values.json
+miniIA.zip
+para_limpar.json
+dante_state.json.homeostasis
+dante_state.json.valence
+values.json
+self_model.json
+relationship_model.json
+auditoria_duplicatas.json
