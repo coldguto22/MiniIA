@@ -15,14 +15,14 @@ from .models.ollama_model import OllamaModel
 DEFAULT_MODEL_CONFIG: dict[str, Any] = {
     "system1": {
         "provider": "ollama",
-        "model": "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M",
+        "model": "qwen2.5:3b",
         "fallback": None,
         "max_tokens": 512,
         "temperature": 0.3,
     },
     "system2": {
         "provider": "ollama",
-        "model": "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M",
+        "model": "llama3.1:8b",
         "max_tokens": 2048,
         "temperature": 0.7,
     },

@@ -4,6 +4,32 @@ Dante é um sistema experimental de IA local com memória persistente e observa�
 
 O projeto não busca simular consciência, mas investigar quais condições estruturais (memória contínua, auto-observação, embodiment digital) seriam necessárias para algo próximo disso.
 
+## Entrega acadêmica
+
+- **Disciplina:** Desenvolvimento de Sistemas Multiplataforma (DSM), Fatec
+- **Repositório:** [github.com/coldguto22/MiniIA](https://github.com/coldguto22/MiniIA)
+- **Integrantes:**
+  - Jorge Rizzini de Castro Filho — [GitHub](https://github.com/JorgeRizzini)
+  - Laísa Eugênio Severiano — [GitHub](https://github.com/LaisaEugenio)
+  - Otávio Augusto de Lima Beato — [GitHub](https://github.com/coldguto22)
+
+### Resumo da aplicação
+
+Dante é um agente local experimental que observa a tela por OCR, produz pensamentos e reflexões, recupera memórias semânticas no ChromaDB e registra um diário. A pesquisa Dante–Mamba avalia se a continuidade de estado entre ciclos pode melhorar a continuidade funcional, a coerência temporal e a recuperação após reinício, sem afirmar consciência ou agência plena.
+
+### Modelos utilizados
+
+- **Qwen2.5:3b:** System 1 de produção e fallback para geração rápida.
+- **Llama 3.1:8b:** System 2 para reflexão, diário e aprendizados de pesquisas.
+- **Mamba:** protótipo experimental isolado, com contrato de sessão, reset e checkpoint; não é usado como modelo de produção enquanto não houver um backend funcional validado.
+- **nomic-embed-text:** geração dos embeddings armazenados no ChromaDB.
+
+### Fonte dos dados
+
+O projeto não usa um dataset público externo como base principal. Os dados são provenientes de observações locais consentidas, capturadas por OCR, e de entradas manuais de memória fornecidas durante os testes. O armazenamento persistente é feito no [ChromaDB](https://www.trychroma.com/). Quando a pesquisa autônoma é acionada, os resultados são obtidos via [DuckDuckGo](https://duckduckgo.com/) usando a biblioteca [DDGS](https://pypi.org/project/ddgs/); esses resultados são tratados como fonte externa de pesquisa, não como dataset versionado.
+
+O código é distribuído sob a licença [MIT](LICENSE).
+
 ## Como funciona
 
 Dante usa uma arquitetura de dois modelos, rodando via [Ollama](https://ollama.com/):
