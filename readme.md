@@ -6,7 +6,8 @@ O projeto não busca simular consciência, mas investigar quais condições estr
 
 ## Entrega acadêmica
 
-- **Disciplina:** Desenvolvimento de Sistemas Multiplataforma (DSM), Fatec
+- **Disciplina:** Aprendizagem de Máquina, curso: Desenvolvimento de Sistemas Multiplataforma (DSM), Fatec
+- **Professor:** Bruno Zolotareff
 - **Repositório:** [github.com/coldguto22/MiniIA](https://github.com/coldguto22/MiniIA)
 - **Integrantes:**
   - Jorge Rizzini de Castro Filho — [GitHub](https://github.com/JorgeRizzini)
