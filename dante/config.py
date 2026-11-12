@@ -15,7 +15,7 @@ from .models.ollama_model import OllamaModel
 DEFAULT_MODEL_CONFIG: dict[str, Any] = {
     "system1": {
         "provider": "ollama",
-        "model": "qwen2.5:3b",
+        "model": "llama3.2:latest",
         "fallback": None,
         "max_tokens": 512,
         "temperature": 0.3,

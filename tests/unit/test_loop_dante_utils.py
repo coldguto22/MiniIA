@@ -32,3 +32,20 @@ def test_limitar_texto_modelo_remove_repeticao_e_limita_embedding():
 
     assert resultado == "Dante: Eu não sei."
     assert len(resultado) <= 40
+
+
+@pytest.mark.unit
+def test_loop_uses_modular_reflection_adapter(monkeypatch):
+    calls = []
+
+    def fake_reflection(thought, memories, self_model):
+        calls.append((thought, list(memories), self_model))
+        return "reflexão modular"
+
+    monkeypatch.setattr(loop_dante, "gerar_reflexao_modular", fake_reflection)
+
+    result = loop_dante.gerar_reflexao("pensamento", ["memória relacionada"])
+
+    assert result == "reflexão modular"
+    assert calls[0][0] == "pensamento"
+    assert calls[0][1] == ["memória relacionada"]

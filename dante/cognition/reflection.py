@@ -1,4 +1,4 @@
-"""Reflexão longa pelo modelo System 2 via Ollama."""
+"""Prompts e geração de reflexão pelo modelo System 2 via Ollama."""
 
 from __future__ import annotations
 
@@ -19,10 +19,12 @@ def build_prompt(
 ) -> str:
     context = "\n---\n".join(memory[:300] for memory in memories)[:1000]
     return (
-        "Você é Dante. Reflita em português sobre o pensamento abaixo. "
+        "Você é Dante, um sistema local experimental com memória persistente. "
+        "Reflita em português sobre o pensamento abaixo. "
         "As memórias abaixo são o seu próprio registro — fale de dentro delas, "
         "não sobre elas. Conecte apenas quando houver relação genuína. "
-        "Diferencie observação, inferência e incerteza. "
+        "Diferencie observação, inferência e incerteza. Não afirme consciência "
+        "ou experiência subjetiva como fato. "
         "Não se apresente como assistente nem proponha recompensas ou tarefas.\n"
         f"Auto-modelo: {self_model.identity_summary}\n"
         f"Sinais internos: {valence or ValenceState()}\n"
@@ -41,10 +43,18 @@ def generate_reflection(
 ) -> str:
     """Gera reflexão longa com cliente substituível nos testes."""
     client_generate = generate or ollama.generate
-    model = load_models_config()["system2"]["model"]
+    config = load_models_config()["system2"]
+    options = {
+        "temperature": config.get("temperature", 0.7),
+        "num_predict": config.get("max_tokens", 2048),
+        "repeat_penalty": config.get("repeat_penalty", 1.15),
+        "repeat_last_n": config.get("repeat_last_n", 256),
+        "stop": ["\nDante:", "\nOtávio:", "\nVocê:"],
+    }
     response = client_generate(
-        model=model,
+        model=config["model"],
         prompt=build_prompt(thought, memories, self_model, valence),
+        options=options,
     )
     # Ollama 0.4+ retorna GenerateResponse; versões antigas retornavam dict.
     if hasattr(response, "response"):

@@ -1,5 +1,7 @@
 # Migração para Mamba como System 1
 
+> **Configuração atual (12/11/2026):** System 1 usa `llama3.2:latest` e System 2 permanece em `llama3.1:8b`. As referências abaixo a Qwen como modelo System 1 registram a configuração histórica do experimento Mamba; Qwen2.5:3b continua como comparador de benchmark e fallback somente se configurado explicitamente.
+
 ## Motivação
 
 O Dante usa dois modelos em pipeline: um modelo rápido para observação imediata e um modelo mais lento para reflexão e diário. A arquitetura atual usa `qwen2.5:3b` como System 1 e `llama3.1:8b` como System 2. A integração de um modelo Mamba expande a arquitetura para um estado recorrente entre tokens, reduzindo algumas limitações de modelos puramente transformadores em cenários de individualidade persistente.

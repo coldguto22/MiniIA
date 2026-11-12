@@ -31,7 +31,7 @@ class MambaModel(OllamaModel):
             raise RuntimeError(f"Mamba model {self.model_name} failed and no fallback was configured.")
 
         fallback = OllamaModel(model_name=self.fallback_model, client=self.client)
-        logger.warning("Usando fallback Qwen para o prompt do System 1.")
+        logger.warning("Usando o fallback configurado para o prompt do System 1.")
         return await fallback.generate(prompt, **kwargs)
 
     async def generate_with_state(

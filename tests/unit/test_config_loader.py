@@ -9,7 +9,7 @@ from dante.models.ollama_model import OllamaModel
 def test_load_models_config_returns_expected_values():
     config = load_models_config()
     assert config["system1"]["provider"] == "ollama"
-    assert config["system1"]["model"] == "qwen2.5:3b"
+    assert config["system1"]["model"] == "llama3.2:latest"
     assert config["system1"]["fallback"] is None
     assert config["system2"]["model"] == "llama3.1:8b"
 

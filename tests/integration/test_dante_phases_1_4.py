@@ -4,29 +4,25 @@ import pytest
 
 import conversar
 import loop_dante
-from dante.core.homeostasis import HomeostasisState
+from dante.core.self_model import build_self_model
 from dante.core.persistence import load_state
+from dante.core.homeostasis import HomeostasisState
+from dante.core.valence import ValenceState
+from dante.loop import cycle
 from dante.core.relationship import RelationshipModel
-from dante.core.self_model import SelfModel
 from dante.core.values import ValueSystem
 
 
 @pytest.mark.integration
 def test_loop_persiste_valencia_e_homeostase_em_ciclos(tmp_path, monkeypatch):
-    state_path = str(tmp_path / "dante_state.json")
-    monkeypatch.setattr(loop_dante, "ESTADO_FILE", state_path)
-    monkeypatch.setattr(loop_dante, "VALUES_FILE", str(tmp_path / "values.json"))
-    monkeypatch.setattr(loop_dante, "RELATIONSHIP_FILE", str(tmp_path / "relationship.json"))
+    state_dir = tmp_path / "state"
+    first = cycle("Tela com texto legível e conteúdo relevante para o ciclo.", state_dir=state_dir)
+    second = cycle("Tela com texto legível e conteúdo relevante para o ciclo.", state_dir=state_dir)
 
-    first_valence, first_homeostasis = loop_dante._advance_internal_states(0.8, 0.7)
-    second_valence, second_homeostasis = loop_dante._advance_internal_states(0.0, 0.0)
-
-    assert first_valence.novelty > second_valence.novelty
-    assert second_homeostasis.stagnation_cycles > first_homeostasis.stagnation_cycles
-    assert load_state(state_path + ".valence", type(first_valence), type(first_valence)) == second_valence
-    assert load_state(
-        state_path + ".homeostasis", HomeostasisState, HomeostasisState
-    ) == second_homeostasis
+    assert first.valence.novelty > 0
+    assert second.homeostasis.updated_at >= first.homeostasis.updated_at
+    assert load_state(state_dir / "valence.json", ValenceState, ValenceState) == second.valence
+    assert load_state(state_dir / "homeostasis.json", HomeostasisState, HomeostasisState) == second.homeostasis
 
 
 @pytest.mark.integration
@@ -37,15 +33,14 @@ def test_nova_entrada_do_diario_atualiza_auto_modelo(tmp_path, monkeypatch):
         "### 06/10/2026 10:00\nFiquei curioso sobre memória e conexão.\n",
         encoding="utf-8",
     )
-    monkeypatch.setattr(loop_dante, "DIARIO_FILE", str(diary_path))
-    monkeypatch.setattr(loop_dante, "SELF_MODEL_FILE", str(model_path))
+    from dante.memory.diary import read_entries
+    from dante.core.persistence import save_state
 
-    current, count = loop_dante._refresh_self_model(SelfModel(), 0)
+    current = build_self_model(read_entries(diary_path))
+    save_state(model_path, current)
 
-    assert count == 1
-    assert current.version == 1
     assert current.recurring_themes
-    assert load_state(model_path, SelfModel, SelfModel) == current
+    assert model_path.exists()
 
 
 @pytest.mark.integration

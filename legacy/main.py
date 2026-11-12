@@ -4,6 +4,8 @@ import chromadb
 import os
 from datetime import datetime
 import ollama
+from dante.cognition.reflection import generate_reflection
+from dante.core.self_model import SelfModel
 
 # Configuração do ChromaDB
 PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
@@ -34,23 +36,9 @@ def buscar_memorias_relacionadas(texto, top_n=2, threshold=0.5):
     return memorias
 
 def gerar_reflexao(pensamento_atual, memorias):
-    """Gera uma reflexão conectando o pensamento atual com memórias passadas."""
-    contexto = "\n---\n".join(memorias)
-    prompt = f"""Você é uma IA com memória e capacidade de reflexão.
-
-Suas memórias anteriores:
----
-{contexto}
----
-
-Observação atual:
-{pensamento_atual}
-
-Com base nas suas memórias e na observação atual, gere uma reflexão curta (1-2 frases) conectando o que você está vendo agora com o que já sabe. Não invente nada que não esteja no contexto ou na observação."""
-
+    """Encaminha a reflexão para o adapter modular configurado em System 2."""
     try:
-        resposta = ollama.generate(model='qwen2.5:3b', prompt=prompt)
-        return resposta['response'].strip()
+        return generate_reflection(pensamento_atual, memorias, SelfModel())
     except Exception as e:
         return f"(Reflexão não gerada: {e})"
 

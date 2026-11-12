@@ -1,6 +1,6 @@
 system1:
   provider: ollama
-  model: "qwen2.5:3b"
+  model: "llama3.2:latest"
   fallback: null
   max_tokens: 512
   temperature: 0.3      # era 0.7 — observação deve ser estável

@@ -6,6 +6,8 @@ O projeto não busca simular consciência, mas investigar quais condições estr
 
 ## Entrega acadêmica
 
+O histórico de decisão dos modelos, benchmarks e validações está em [BENCHMARKS_LLM.md](BENCHMARKS_LLM.md).
+
 - **Disciplina:** Aprendizagem de Máquina, curso: Desenvolvimento de Sistemas Multiplataforma (DSM), Fatec
 - **Professor:** Bruno Zolotareff
 - **Repositório:** [github.com/coldguto22/MiniIA](https://github.com/coldguto22/MiniIA)
@@ -20,8 +22,8 @@ Dante é um agente local experimental que observa a tela por OCR, produz pensame
 
 ### Modelos utilizados
 
-- **Qwen2.5:3b:** System 1 de produção e fallback para geração rápida.
-- **Llama 3.1:8b:** System 2 para reflexão, diário e aprendizados de pesquisas.
+- **System 1:** configurado atualmente com Llama 3.2:latest. Qwen2.5:3b é usado como comparador nos benchmarks e pode ser configurado explicitamente como fallback.
+- **System 2:** Llama 3.1:8b, mantido como modelo estabelecido para reflexão, diário, conversa e aprendizados de pesquisas.
 - **Mamba:** protótipo experimental isolado, com contrato de sessão, reset e checkpoint; não é usado como modelo de produção enquanto não houver um backend funcional validado.
 - **nomic-embed-text:** geração dos embeddings armazenados no ChromaDB.
 
@@ -33,10 +35,10 @@ O código é distribuído sob a licença [MIT](LICENSE).
 
 ## Como funciona
 
-Dante usa uma arquitetura de dois modelos, rodando via [Ollama](https://ollama.com/):
+Dante mantém dois papéis cognitivos configuráveis via [Ollama](https://ollama.com/):
 
-- **Qwen2.5:3b** — modelo rápido de produção para o "pensamento" imediato (System 1). O adapter Mamba existe como protótipo experimental isolado.
-- **Llama 3.1:8b** — modelo mais lento, usado para entradas de diário e para os aprendizados gerados a partir de pesquisas autônomas (System 2).
+- **Llama 3.2:latest** — configuração atual do pensamento curto (System 1); o benchmark compara esse modelo com Qwen2.5:3b.
+- **Llama 3.1:8b** — modelo estabelecido de System 2 para reflexão, diário, conversa e aprendizados de pesquisa; permanece inalterado.
 - **ChromaDB** — armazena tudo como embeddings (gerados com `nomic-embed-text`), permitindo que Dante recupere memórias relacionadas ao que está observando agora. A base é **persistente entre execuções** — reiniciar o loop não apaga a memória acumulada.
 - **Tesseract (OCR)** — extrai texto da tela a cada ciclo de observação.
 - **Asas** (`asas.py`) — módulo de pesquisa autônoma via DuckDuckGo (biblioteca `ddgs`). Permite que Dante busque na internet quando um pensamento contém uma curiosidade genuína.
@@ -45,8 +47,8 @@ O ciclo do loop principal (`loop_dante.py`) é:
 
 1. Verifica se a tela mudou (hash de pixels) — evita processar a mesma tela repetidamente.
 2. Captura a tela e extrai texto via OCR; se o texto for idêntico ao ciclo anterior ou for curto demais para ter conteúdo legível, o ciclo é pulado ou o salvamento na memória é ignorado.
-3. Gera um "pensamento" sobre o que foi observado (Qwen2.5:3b em produção).
-4. A cada `CYCLES_ENTRE_PESQUISAS` ciclos, avalia se o pensamento contém uma curiosidade pesquisável; se sim, busca na web (Asas), gera um aprendizado (Llama 3.1:8b) e registra no diário e na memória imediatamente.
+3. Gera um "pensamento" sobre o que foi observado usando o adapter modular de cognição (Llama 3.2:latest por padrão).
+4. A cada `CYCLES_ENTRE_PESQUISAS` ciclos, avalia se o pensamento contém uma curiosidade pesquisável; se sim, busca na web (Asas), gera um aprendizado com o System 2 (Llama 3.1:8b) e registra no diário e na memória imediatamente.
 5. Busca memórias relacionadas no ChromaDB.
 6. Gera uma reflexão conectando observação atual e memórias (ou uma reflexão livre, se nada relevante for encontrado).
 7. Salva pensamento e reflexão na memória persistente (quando o texto observado não é ruído).
@@ -56,12 +58,12 @@ Tudo é logado em `dante.log`.
 
 ## Arquitetura Mamba (protótipo experimental)
 
-A arquitetura mantém o System 1 de produção estável e oferece um fluxo stateful isolado para experimentação, mantendo o Llama 3.1:8b como System 2:
+A arquitetura mantém os papéis System 1 e System 2 configuráveis e oferece um fluxo stateful isolado para experimentação:
 
-- **System 1 (produção):** Qwen2.5:3b, sem estado persistente experimental ativado.
+- **System 1 (padrão):** Llama 3.2:latest, sem estado persistente experimental ativado.
 - **Protótipo Mamba:** `MambaModel` + `ModelSession`, com reset, checkpoint/restauração e isolamento por sessão.
-- **System 2 (Llama 3.1:8b):** responsável pelo diário, reflexão mais lenta e geração de aprendizados.
-- **Fallback:** a geração textual do adapter Mamba pode usar Qwen quando configurada; a geração stateful falha explicitamente quando o backend não retorna estado serializável.
+- **System 2 (Llama 3.1:8b):** responsável pelo diário, reflexão mais longa e geração de aprendizados; permanece como modelo estabelecido.
+- **Fallback:** opcional por configuração; permanece desativado por padrão para usar Llama em todos os papéis. A geração stateful do Mamba falha explicitamente quando o backend não retorna estado serializável.
 - **Limite importante:** `ollama-context` é continuação serializável de prompt, não acesso ao estado recorrente interno do Mamba.
 - **Configuração centralizada:** `config/models.yaml` define os modelos e parâmetros de geração.
 
@@ -78,8 +80,9 @@ O trabalho separa quatro condições: baseline Transformer + RAG, Mamba com rese
 - Python 3.10+
 - [Ollama](https://ollama.com/) instalado e rodando, com os modelos de produção baixados:
   ```
-  ollama pull qwen2.5:3b
+  ollama pull llama3.2:latest
   ollama pull llama3.1:8b
+  ollama pull qwen2.5:3b  # opcional; necessário apenas para comparar com Qwen
   ollama pull nomic-embed-text
   ```
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) instalado (com suporte ao idioma português — pacote `por`)
@@ -115,6 +118,10 @@ Com o ambiente virtual ativado, execute o script desejado diretamente:
 | `python conversar.py` | Abre um chat direto com Dante — você faz uma pergunta, ele responde usando suas memórias como contexto. |
 | `python alimentar_memoria.py` | Permite inserir manualmente um texto na memória do Dante (ex: conhecimento fundacional, conversas importantes). Cole o texto e finalize com `END`. |
 | `python ver_memorias.py` | Lista as memórias mais recentes armazenadas no ChromaDB (ID, tipo, data e prévia do conteúdo) — útil para inspecionar o que Dante já registrou. |
+
+Para comparar Qwen2.5:3b e Llama 3.2:latest em latência, tokens medidos pelo Ollama e qualidade avaliada por um juiz Llama, execute `python benchmarks/compare_models.py`. O comando salva um JSON com as respostas completas e um resumo Markdown em `benchmarks/results/`. A avaliação de qualidade é auxiliar e deve ser revisada junto das respostas brutas. A primeira comparação está em [JSON](benchmarks/results/qwen_llama_20261112_152411.json) e [resumo](benchmarks/results/qwen_llama_20261112_152411.md).
+
+Para comparar respostas ancoradas em OCR de uma captura real, execute `python benchmarks/compare_models_ocr.py --image C:\caminho\captura.png --lang por+eng --psm 3 --crop 250 100 1420 850`. O recorte é opcional; omita-o para usar a imagem inteira. O JSON registra o texto reconhecido, respostas completas, tokens, latência e notas de qualidade. O teste baseado na captura fornecida está em [JSON](benchmarks/results/qwen_llama_ocr_20261112_172625.json) e [resumo](benchmarks/results/qwen_llama_ocr_20261112_172625.md).
 
 ### Outros scripts (suporte/legado)
 

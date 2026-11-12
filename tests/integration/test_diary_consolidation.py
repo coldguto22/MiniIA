@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
 import loop_dante
-from dante.memory.consolidation import consolidate_diary
+from dante.memory.consolidation import consolidate_diary, consolidate_entries
 
 
 @pytest.mark.integration
@@ -29,19 +29,17 @@ def test_consolidate_diary_writes_separate_chapter_without_deleting_source(tmp_p
 
 
 @pytest.mark.integration
-def test_loop_consolidates_only_at_configured_entry_milestone(tmp_path, monkeypatch):
+def test_consolidation_keeps_source_and_respects_retention_limit(tmp_path):
     diary_path = tmp_path / "diario.md"
     chapter_path = tmp_path / "capitulos.md"
-    monkeypatch.setattr(loop_dante, "DIARIO_FILE", str(diary_path))
-    monkeypatch.setattr(loop_dante, "CHAPTER_FILE", str(chapter_path))
-    monkeypatch.setattr(loop_dante, "CONSOLIDATION_EVERY_ENTRIES", 2)
-    diary_path.write_text(
-        "### 01/01/2026 10:00\nUma entrada significativa sobre memória.\n"
-        "### 02/01/2026 10:00\nOutra entrada significativa sobre novidade.\n",
-        encoding="utf-8",
-    )
+    entries = ["Entrada antiga sem relevância " + ("x" * 50), "Memória e novidade são temas recorrentes."]
+    original = "\n".join(entries)
+    diary_path.write_text(original, encoding="utf-8")
+    result = consolidate_entries(entries, retention_limit=1, now=datetime(2026, 10, 6, tzinfo=timezone.utc))
+    saved = consolidate_diary(diary_path, chapter_path, retention_limit=1)
 
-    updated = loop_dante._consolidate_if_needed(2, 0)
-
-    assert updated == 2
+    assert result.retained_entries == 1
+    assert result.omitted_entries == 1
     assert chapter_path.exists()
+    assert saved.retained_entries == 1
+    assert diary_path.read_text(encoding="utf-8") == original

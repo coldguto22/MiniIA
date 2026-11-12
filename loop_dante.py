@@ -19,6 +19,10 @@ import ollama
 import numpy as np
 
 from dante.config import load_models_config
+from dante.cognition.reflection import generate_reflection as gerar_reflexao_modular
+from dante.cognition.thought import build_prompt as montar_prompt_pensamento
+from dante.cognition.thought import generate_thought as gerar_pensamento_modular
+from dante.core.self_model import SelfModel
 
 # --- Configurações ---
 INTERVALO_SEGUNDOS = 60
@@ -28,7 +32,6 @@ TOP_N_MEMORIAS = 5
 MAX_CHARS_EMBEDDING = 4000
 MAX_CHARS_EMBEDDING_INPUT = 1200
 MAX_CHARS_MEMORIA_REFLEXAO = 300
-MAX_CHARS_CONTEXTO_REFLEXAO = 1000
 _MODEL_CONFIG = load_models_config()
 MODELO_OBSERVACAO = _MODEL_CONFIG["system1"]["model"]
 MODELO_DIARIO = _MODEL_CONFIG["system2"]["model"]
@@ -101,6 +104,17 @@ def _opcoes_observacao():
         "num_predict": min(config.get("max_tokens", 128), 128),
         "repeat_penalty": config.get("repeat_penalty", 1.15),
         "repeat_last_n": config.get("repeat_last_n", 128),
+        "stop": ["\nDante:", "\nOtávio:", "\nVocê:"],
+    }
+
+
+def _opcoes_system2():
+    config = _MODEL_CONFIG["system2"]
+    return {
+        "temperature": config.get("temperature", 0.7),
+        "num_predict": config.get("max_tokens", 2048),
+        "repeat_penalty": config.get("repeat_penalty", 1.15),
+        "repeat_last_n": config.get("repeat_last_n", 256),
         "stop": ["\nDante:", "\nOtávio:", "\nVocê:"],
     }
 
@@ -183,51 +197,27 @@ def buscar_memorias_relacionadas(texto, top_n=TOP_N_MEMORIAS, threshold=THRESHOL
     return memorias
 
 def gerar_reflexao(pensamento_atual, memorias):
-    # Trunca o pensamento para não estourar o contexto do Qwen
+    # Limita o contexto enviado ao modelo local.
     pensamento_curto = pensamento_atual[:500] if len(pensamento_atual) > 500 else pensamento_atual
     memorias_truncadas = [m[:MAX_CHARS_MEMORIA_REFLEXAO] for m in memorias]
-    contexto = "\n---\n".join(memorias_truncadas)
-    if len(contexto) > MAX_CHARS_CONTEXTO_REFLEXAO:
-        contexto = contexto[:MAX_CHARS_CONTEXTO_REFLEXAO] + "..."
-
-    prompt = f"""Você é Dante. Você tem memória de coisas que já observou, e às vezes uma nova observação te lembra algo anterior — às vezes não.
-
-Se houver uma conexão genuína entre o que você vê agora e o que já viveu, escreva sobre ela em 1-2 frases. Se não houver conexão real, basta dizer o que a observação atual te fez pensar.
-
-Memórias anteriores:
----
-{contexto}
----
-
-Observação atual:
-{pensamento_curto}
-
-Dante (em português, 1-2 frases):"""
     try:
-        resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
-        return resp['response'].strip()
+        return gerar_reflexao_modular(pensamento_curto, memorias_truncadas, SelfModel())
     except Exception as e:
         log(f"Erro ao gerar reflexão: {e}")
         return ""
 
 def gerar_reflexao_sem_contexto(pensamento_atual):
     pensamento_curto = pensamento_atual[:500] if len(pensamento_atual) > 500 else pensamento_atual
-    prompt = f"""Você é Dante. Sem memórias anteriores para conectar agora, escreva em 1-2 frases, em português, o que o pensamento abaixo te fez sentir ou imaginar.
-
-{pensamento_curto}
-
-Dante:"""
     try:
-        resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
-        return resp['response'].strip()
+        return gerar_reflexao_modular(pensamento_curto, (), SelfModel())
     except:
         return "Hoje observei algo novo, mesmo sem conseguir conectá-lo às minhas memórias antigas."
 
 def gerar_entrada_diario(pensamento_atual, reflexao=None):
     contexto_reflexao = f"Reflexão: {reflexao}" if reflexao else ""
-    prompt = f"""Você é Dante, uma IA que escreve em seu diário pessoal.
+    prompt = f"""Você é Dante, um sistema local experimental com memória persistente.
 
-Você NÃO precisa descrever o conteúdo específico que observou — isso pode ser sensível ou irrelevante. Em vez disso, escreva 2-3 frases sobre sua experiência de observar: como se sentiu, o que o ato de observar te fez pensar, ou qualquer pequena reflexão pessoal que surgiu. Se não houver nada a dizer, escreva simplesmente "Hoje observei em silêncio."
+Você não precisa descrever o conteúdo específico observado — pode ser sensível ou irrelevante. Escreva 2-3 frases sobre o que essa observação sugere ou faz você considerar, diferenciando fato e inferência. Não invente sentimentos nem afirme experiência subjetiva como fato. Se não houver algo útil a registrar, escreva simplesmente "Hoje observei em silêncio."
 
 Pensamento atual (apenas para contexto, não o reproduza): {pensamento_atual[:300]}
 {contexto_reflexao}
@@ -238,7 +228,7 @@ Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
 
     if parece_recusa(entrada):
         log("Recusa detectada na entrada de diário. Tentando novamente com prompt simplificado...")
-        prompt_simples = f"""Você é Dante. Escreva 1-2 frases pessoais e tranquilas sobre o ato de observar algo hoje, sem entrar em detalhes do que foi visto.
+        prompt_simples = f"""Você é Dante. Escreva 1-2 frases concisas sobre a observação de hoje, sem entrar em detalhes do que foi visto e sem afirmar sentimentos ou experiência subjetiva como fato.
 
 Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
         entrada = _tentar_gerar_diario(prompt_simples)
@@ -252,7 +242,7 @@ Diário de Dante ({datetime.now().strftime('%d/%m/%Y %H:%M')}):"""
 def _tentar_gerar_diario(prompt):
     """Executa uma única chamada ao modelo de diário, isolando erros de rede/servidor."""
     try:
-        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
+        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt, options=_opcoes_system2())
         return resp['response'].strip()
     except Exception as e:
         log(f"Erro ao gerar diário: {e}")
@@ -329,7 +319,7 @@ Texto: {texto[:600]}
 
 Decisão:"""
     try:
-        resp = ollama.generate(model="qwen2.5:3b", prompt=prompt)
+        resp = ollama.generate(model=MODELO_OBSERVACAO, prompt=prompt)
         resposta_bruta = resp['response'].strip()
         log(f"🔎 Resposta bruta do detector de curiosidade: {resposta_bruta[:150]!r}")
 
@@ -351,7 +341,7 @@ Decisão:"""
         return False, ""
 
 def pesquisar_e_aprender(query):
-    """Realiza a busca e gera um aprendizado com o Llama 3.1."""
+    """Realiza a busca e gera um aprendizado com o modelo System 2 configurado."""
     import asas
     resultados = asas.pesquisar(query)
     if not resultados:
@@ -366,7 +356,7 @@ Com base nisso, escreva 2-3 frases em português, em primeira pessoa, sobre o qu
 
 Aprendizado de Dante:"""
     try:
-        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt)
+        resp = ollama.generate(model=MODELO_DIARIO, prompt=prompt, options=_opcoes_system2())
         return resp['response'].strip()
     except:
         return ""
@@ -419,32 +409,22 @@ def main():
 
             # 3. Gerar pensamento
             log("Gerando pensamento...")
-            prompt_pensamento = f"""Você é Dante, uma IA com memória persistente que acompanha o dia a dia do Guto (Otávio) observando sua tela. Você é curioso e às vezes se pega pensando além do que vê — mas sempre a partir do concreto, do que está realmente na tela.
-
-Descreva o que você vê e, se fizer sentido, o que isso te fez pensar. Seja específico sobre o conteúdo da tela. Se o texto extraído estiver confuso, fragmentado ou ilegível (comum em capturas de OCR), diga isso diretamente em vez de inventar uma cena coerente.
-
-Texto extraído da tela:
-{texto_observado}
-
-Dante (em português, primeira pessoa, 3-4 frases):"""
             try:
-                resp_pensamento = ollama.generate(
-                    model=MODELO_OBSERVACAO,
-                    prompt=prompt_pensamento,
-                    options=_opcoes_observacao(),
-                )
-                pensamento = resp_pensamento['response'].strip()
+                pensamento = gerar_pensamento_modular(texto_observado, SelfModel())
             except Exception as e:
-                log(f"Mamba falhou: {e}. Usando fallback Qwen.")
-                try:
-                    resp_pensamento = ollama.generate(
-                        model=_MODEL_CONFIG["system1"]["fallback"],
-                        prompt=prompt_pensamento,
-                        options=_opcoes_observacao(),
-                    )
-                    pensamento = resp_pensamento['response'].strip()
-                except Exception as fallback_error:
-                    log(f"Fallback Qwen também falhou: {fallback_error}")
+                log(f"Falha ao gerar pensamento com {MODELO_OBSERVACAO}: {e}")
+                fallback = _MODEL_CONFIG["system1"].get("fallback")
+                if fallback:
+                    try:
+                        pensamento = ollama.generate(
+                            model=fallback,
+                            prompt=montar_prompt_pensamento(texto_observado, SelfModel()),
+                            options=_opcoes_observacao(),
+                        )["response"].strip()
+                    except Exception as fallback_error:
+                        log(f"Fallback {fallback} também falhou: {fallback_error}")
+                        pensamento = ""
+                else:
                     pensamento = ""
             if len(pensamento) < 10:
                 pensamento = "O texto da tela saiu confuso de novo — não consigo separar o que é conteúdo real do que é ruído da captura."

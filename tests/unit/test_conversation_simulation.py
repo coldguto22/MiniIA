@@ -48,7 +48,7 @@ def test_two_turn_conversation_preserves_history_and_memory_provenance(tmp_path,
     assert "fonte=diario.md" in first_prompt
     assert first in second_prompt
     assert all(
-        call["model"] == "llama3.1:8b"
+        call["model"] == conversar.load_models_config()["system2"]["model"]
         for call in calls
     )
     assert all(call["options"]["temperature"] == 0.7 for call in calls)

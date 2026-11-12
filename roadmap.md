@@ -1,5 +1,7 @@
 # Roadmap do Projeto Dante (MiniIA)
 
+> **Configuração atual (12/11/2026):** System 1 usa `llama3.2:latest`; System 2 permanece em `llama3.1:8b`. As menções a Qwen nas fases abaixo descrevem experimentos e decisões históricas.
+
 ## Refatoração Dante (em andamento)
 
 O trabalho novo parte da base estável `origin/main`, mantém Qwen2.5:3b e Llama
