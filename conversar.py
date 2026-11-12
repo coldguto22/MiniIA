@@ -164,9 +164,6 @@ Conversa até agora:
 {historico_str or 'Nenhum turno anterior nesta sessão.'}
 ---
 
-O que você vem observando sobre Otávio:
-{relationship.otavio_profile}
-
 Sinais internos atuais:
 novidade={valence.novelty:.2f}, coerência={valence.coherence:.2f}, energia={homeostasis.energy:.2f}, tédio={homeostasis.boredom:.2f}
 
