@@ -1,19 +1,6 @@
-"""Implementações de modelos; backends são importados sob demanda."""
+from .base import BaseModel
+from .mamba_model import MambaModel
+from .ollama_model import OllamaModel
+from .stateful import ModelSession, StatefulModel
 
-__all__ = ["BaseModel", "MambaModel", "OllamaModel"]
-
-
-def __getattr__(name: str):
-    if name == "BaseModel":
-        from .base import BaseModel
-
-        return BaseModel
-    if name == "OllamaModel":
-        from .ollama_model import OllamaModel
-
-        return OllamaModel
-    if name == "MambaModel":
-        from .mamba_model import MambaModel
-
-        return MambaModel
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+__all__ = ["BaseModel", "MambaModel", "ModelSession", "OllamaModel", "StatefulModel"]

@@ -61,6 +61,14 @@ class OllamaModel(BaseModel):
             options["num_predict"] = values.pop("max_tokens")
         if "temperature" in values:
             options["temperature"] = values.pop("temperature")
+        if "repeat_penalty" in values:
+            options["repeat_penalty"] = values.pop("repeat_penalty")
+        if "repeat_last_n" in values:
+            options["repeat_last_n"] = values.pop("repeat_last_n")
         if options:
             values["options"] = options
         return values
+
+    def _generation_payload(self, overrides: dict[str, Any]) -> dict[str, Any]:
+        """Compatibility alias for stateful model adapters."""
+        return self._build_payload(overrides)

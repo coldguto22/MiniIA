@@ -3,13 +3,21 @@ from scripts.common import memory_collection
 
 def main(limit=20):
     colecao = memory_collection()
-    resultado = colecao.peek(limit=limit)
+    resultado = colecao.get(include=["documents", "metadatas"])
+    registros = list(
+        zip(
+            resultado.get("ids") or [],
+            resultado.get("documents") or [],
+            resultado.get("metadatas") or [],
+        )
+    )
+    registros.sort(key=lambda registro: (registro[2] or {}).get("timestamp", ""), reverse=True)
 
     print(f"Total de documentos na colecao: {colecao.count()}\n")
     print("=" * 80)
-    for i, doc in enumerate(resultado["documents"]):
-        meta = resultado["metadatas"][i] if resultado["metadatas"] else {}
-        print(f"ID: {resultado['ids'][i]}")
+    for memoria_id, doc, meta in registros[:limit]:
+        meta = meta or {}
+        print(f"ID: {memoria_id}")
         print(f"Tipo: {meta.get('tipo', 'desconhecido')}")
         print(f"Data: {meta.get('timestamp', 'sem data')[:19]}")
         print(f"Truncado: {meta.get('truncado', False)}")

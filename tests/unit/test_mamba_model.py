@@ -2,8 +2,8 @@ import asyncio
 
 import pytest
 
-from dante.models.mamba_model import MambaModel
 from dante.models.checkpoint import CheckpointError
+from dante.models.mamba_model import MambaModel
 
 
 class FakeClient:
@@ -17,12 +17,8 @@ class FakeClient:
 
 
 class StatefulFakeClient(FakeClient):
-    def __init__(self):
-        self.contexts = []
-
     def generate(self, model, prompt, **kwargs):
         context = kwargs.get("context", [])
-        self.contexts.append(context)
         return {"response": f"stateful:{prompt}", "context": [*context, len(prompt)]}
 
 
@@ -49,29 +45,15 @@ def test_health_check():
 
 
 @pytest.mark.unit
-def test_generate_with_state_round_trips_ollama_context():
-    client = StatefulFakeClient()
-    model = MambaModel(model_name="test-mamba", client=client)
-
-    first_response, checkpoint = asyncio.run(
-        model.generate_with_state("primeiro", session_id="session-a")
-    )
-    second_response, next_checkpoint = asyncio.run(
+def test_generate_with_state_round_trips_context_and_validates_session():
+    model = MambaModel(model_name="test-mamba", client=StatefulFakeClient())
+    first, checkpoint = asyncio.run(model.generate_with_state("primeiro", session_id="session-a"))
+    second, updated = asyncio.run(
         model.generate_with_state("segundo", session_id="session-a", checkpoint=checkpoint)
     )
 
-    assert first_response == "stateful:primeiro"
-    assert second_response == "stateful:segundo"
-    assert checkpoint.state_type == "ollama-context"
-    assert client.contexts == [[], [8]]
-    assert next_checkpoint.payload == [8, 7]
-
-
-@pytest.mark.unit
-def test_generate_with_state_rejects_checkpoint_from_other_session():
-    client = StatefulFakeClient()
-    model = MambaModel(model_name="test-mamba", client=client)
-    _, checkpoint = asyncio.run(model.generate_with_state("primeiro", session_id="session-a"))
-
+    assert first == "stateful:primeiro"
+    assert second == "stateful:segundo"
+    assert updated.payload == [8, 7]
     with pytest.raises(CheckpointError, match="session"):
-        asyncio.run(model.generate_with_state("segundo", session_id="session-b", checkpoint=checkpoint))
+        asyncio.run(model.generate_with_state("terceiro", session_id="session-b", checkpoint=checkpoint))

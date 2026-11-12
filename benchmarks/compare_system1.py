@@ -24,6 +24,9 @@ except Exception:  # pragma: no cover - optional dependency in constrained envs
 
 from dante.config import load_models_config
 
+QWEN_MODEL = "qwen2.5:3b"
+MAMBA_MODEL = "hf.co/bartowski/mamba-2.8b-hf-GGUF:Q4_K_M"
+
 PROMPTS = [
     "Explique em duas frases por que a observação contínua ajuda uma IA a lembrar contexto.",
     "Descreva uma rotina de trabalho eficiente para um time de engenharia de IA.",
@@ -66,34 +69,41 @@ def _installed_models() -> set[str]:
     except Exception:
         return set()
 
-    models = response.get("models", []) if isinstance(response, dict) else []
+    models = response.get("models", []) if isinstance(response, dict) else getattr(response, "models", [])
     names: set[str] = set()
     for item in models:
         if isinstance(item, dict):
-            name = item.get("name")
+            name = item.get("name") or item.get("model")
             if name:
                 names.add(name)
-        elif hasattr(item, "name"):
-            names.add(str(item.name))
+        else:
+            name = getattr(item, "name", None) or getattr(item, "model", None)
+            if name:
+                names.add(str(name))
     return names
 
 
 def _safe_generate(model_name: str, prompt: str) -> tuple[str, float, int]:
     if model_name not in _installed_models():
-        return (
-            f"[simulado] modelo={model_name}; prompt_len={len(prompt)}",
-            0.0,
-            len(prompt),
-        )
+        raise RuntimeError(f"Modelo não instalado no Ollama: {model_name}")
 
     start = time.perf_counter()
     try:
         client = getattr(ollama, "Client", None)
         if client is not None:
-            response = client(timeout=5).generate(model=model_name, prompt=prompt)
+            response = client(
+                timeout=30
+            ).generate(
+                model=model_name,
+                prompt=prompt,
+                options={"num_predict": 128, "temperature": 0.1},
+            )
         else:
             response = ollama.generate(model=model_name, prompt=prompt)
-        text = str(response.get("response", "")).strip() if isinstance(response, dict) else str(response).strip()
+        if isinstance(response, dict):
+            text = str(response.get("response", "")).strip()
+        else:
+            text = str(getattr(response, "response", response)).strip()
         elapsed = time.perf_counter() - start
         return text, elapsed, len(text.split())
     except Exception as exc:  # pragma: no cover - network/model missing
@@ -118,8 +128,6 @@ def _generate_png(output_path: Path, payload: dict) -> None:
 
 def main() -> None:
     config = load_models_config()
-    system1 = config["system1"]
-    fallback = system1.get("fallback", "qwen2.5:3b")
     output_dir = Path(__file__).resolve().parent / "results"
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -127,10 +135,10 @@ def main() -> None:
     mamba_results = []
 
     for prompt in PROMPTS:
-        qwen_text, qwen_elapsed, qwen_tokens = _safe_generate(fallback, prompt)
+        qwen_text, qwen_elapsed, qwen_tokens = _safe_generate(QWEN_MODEL, prompt)
         qwen_results.append({"prompt": prompt, "response": qwen_text, "elapsed_sec": qwen_elapsed, "tokens": qwen_tokens})
 
-        mamba_text, mamba_elapsed, mamba_tokens = _safe_generate(system1["model"], prompt)
+        mamba_text, mamba_elapsed, mamba_tokens = _safe_generate(MAMBA_MODEL, prompt)
         mamba_results.append({"prompt": prompt, "response": mamba_text, "elapsed_sec": mamba_elapsed, "tokens": mamba_tokens})
 
     def summarize(results: list[dict]) -> dict:
@@ -149,9 +157,10 @@ def main() -> None:
     payload = {
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "config": config,
+        "benchmark_models": {"qwen": QWEN_MODEL, "mamba": MAMBA_MODEL},
         "systems": {
-            "qwen": {"model": fallback, "results": qwen_results, "summary": summarize(qwen_results)},
-            "mamba": {"model": system1["model"], "results": mamba_results, "summary": summarize(mamba_results)},
+            "qwen": {"model": QWEN_MODEL, "results": qwen_results, "summary": summarize(qwen_results)},
+            "mamba": {"model": MAMBA_MODEL, "results": mamba_results, "summary": summarize(mamba_results)},
         },
     }
     payload["summary"] = {

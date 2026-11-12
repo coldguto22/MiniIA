@@ -1,4 +1,4 @@
-"""Versioned, isolated checkpoints for model state payloads."""
+"""Versioned, isolated checkpoints for stateful model sessions."""
 
 from __future__ import annotations
 
@@ -36,25 +36,21 @@ class ModelCheckpoint:
             "payload": self.payload,
             "metadata": self.metadata,
         }
-        body["payload_sha256"] = _payload_digest(body["payload"])
+        body["payload_sha256"] = _payload_digest(self.payload)
         return body
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ModelCheckpoint":
         if data.get("version") != CHECKPOINT_VERSION:
             raise CheckpointError("unsupported checkpoint version")
-
         required = ("model_name", "backend", "session_id", "state_type", "payload")
         if any(not data.get(field_name) for field_name in required):
             raise CheckpointError("checkpoint is missing required fields")
-
         if data.get("payload_sha256") != _payload_digest(data["payload"]):
             raise CheckpointError("checkpoint payload checksum does not match")
-
         metadata = data.get("metadata", {})
         if not isinstance(metadata, dict):
             raise CheckpointError("checkpoint metadata must be an object")
-
         return cls(
             model_name=str(data["model_name"]),
             backend=str(data["backend"]),
@@ -66,7 +62,7 @@ class ModelCheckpoint:
 
 
 def save_checkpoint(path: str | Path, checkpoint: ModelCheckpoint) -> None:
-    """Save a checkpoint atomically so interrupted writes do not replace it."""
+    """Save a checkpoint atomically."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".tmp")
@@ -84,16 +80,13 @@ def load_checkpoint(
     expected_backend: str | None = None,
     expected_session_id: str | None = None,
 ) -> ModelCheckpoint:
-    """Load and validate a checkpoint against the requested execution context."""
-    source = Path(path)
+    """Load and validate a checkpoint against an execution context."""
     try:
-        data = json.loads(source.read_text(encoding="utf-8"))
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise CheckpointError("could not read checkpoint") from exc
-
     if not isinstance(data, dict):
         raise CheckpointError("checkpoint root must be an object")
-
     checkpoint = ModelCheckpoint.from_dict(data)
     if expected_model_name and checkpoint.model_name != expected_model_name:
         raise CheckpointError("checkpoint model does not match the requested model")

@@ -4,7 +4,6 @@ Extrai o campo `response='...'` real, reembeda e reescreve o documento.
 Backup automático antes de alterar.
 """
 import ast
-import re
 import shutil
 from datetime import datetime
 from pathlib import Path
@@ -16,13 +15,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PERSIST_DIR = BASE_DIR / "chroma_db"
 BACKUP_DIR = BASE_DIR / "backups"
 EMBEDDING_MODEL = "nomic-embed-text"
-
-# Match response='...' ou response="..." antes de , word= ou )
-_RESPONSE_RE = re.compile(
-    r"response=(['\"])((?:\\.|(?!\1).)*)\1(?=,\s*\w+\s*=|\s*\))",
-    re.DOTALL,
-)
-
 
 def extract_ollama_response(texto: str) -> str | None:
     """Extrai response='...' de um str(obj) do Ollama.

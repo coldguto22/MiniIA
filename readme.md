@@ -4,12 +4,39 @@ Dante é um sistema experimental de IA local com memória persistente e observa�
 
 O projeto não busca simular consciência, mas investigar quais condições estruturais (memória contínua, auto-observação, embodiment digital) seriam necessárias para algo próximo disso.
 
+## Entrega acadêmica
+
+- **Disciplina:** Aprendizagem de Máquina, curso: Desenvolvimento de Sistemas Multiplataforma (DSM), Fatec
+- **Professor:** Bruno Zolotareff
+- **Repositório:** [github.com/coldguto22/MiniIA](https://github.com/coldguto22/MiniIA)
+- **Integrantes:**
+  - Jorge Rizzini de Castro Filho — [GitHub](https://github.com/JorgeRizzini)
+  - Laísa Eugênio Severiano — [GitHub](https://github.com/LaisaEugenio)
+  - Otávio Augusto de Lima Beato — [GitHub](https://github.com/coldguto22)
+
+### Resumo da aplicação
+
+Dante é um agente local experimental que observa a tela por OCR, produz pensamentos e reflexões, recupera memórias semânticas no ChromaDB e registra um diário. A pesquisa Dante–Mamba avalia se a continuidade de estado entre ciclos pode melhorar a continuidade funcional, a coerência temporal e a recuperação após reinício, sem afirmar consciência ou agência plena.
+
+### Modelos utilizados
+
+- **Qwen2.5:3b:** System 1 de produção e fallback para geração rápida.
+- **Llama 3.1:8b:** System 2 para reflexão, diário e aprendizados de pesquisas.
+- **Mamba:** protótipo experimental isolado, com contrato de sessão, reset e checkpoint; não é usado como modelo de produção enquanto não houver um backend funcional validado.
+- **nomic-embed-text:** geração dos embeddings armazenados no ChromaDB.
+
+### Fonte dos dados
+
+O projeto não usa um dataset público externo como base principal. Os dados são provenientes de observações locais consentidas, capturadas por OCR, e de entradas manuais de memória fornecidas durante os testes. O armazenamento persistente é feito no [ChromaDB](https://www.trychroma.com/). Quando a pesquisa autônoma é acionada, os resultados são obtidos via [DuckDuckGo](https://duckduckgo.com/) usando a biblioteca [DDGS](https://pypi.org/project/ddgs/); esses resultados são tratados como fonte externa de pesquisa, não como dataset versionado.
+
+O código é distribuído sob a licença [MIT](LICENSE).
+
 ## Como funciona
 
 Dante usa uma arquitetura de dois modelos, rodando via [Ollama](https://ollama.com/):
 
-- **Qwen2.5:3b via Ollama** — modelo rápido, responsável pelo pensamento imediato (System 1).
-- **Qwen2.5:7b** — modelo mais lento, usado para reflexões, entradas de diário, conversas e aprendizados gerados por pesquisas autônomas (System 2).
+- **Qwen2.5:3b** — modelo rápido de produção para o "pensamento" imediato (System 1). O adapter Mamba existe como protótipo experimental isolado.
+- **Llama 3.1:8b** — modelo mais lento, usado para entradas de diário e para os aprendizados gerados a partir de pesquisas autônomas (System 2).
 - **ChromaDB** — armazena tudo como embeddings (gerados com `nomic-embed-text`), permitindo que Dante recupere memórias relacionadas ao que está observando agora. A base é **persistente entre execuções** — reiniciar o loop não apaga a memória acumulada.
 - **Tesseract (OCR)** — extrai texto da tela a cada ciclo de observação.
 - **Asas** (`asas.py`) — módulo de pesquisa autônoma via DuckDuckGo (biblioteca `ddgs`). Permite que Dante busque na internet quando um pensamento contém uma curiosidade genuína.
@@ -18,61 +45,41 @@ O ciclo do loop principal (`loop_dante.py`) é:
 
 1. Verifica se a tela mudou (hash de pixels) — evita processar a mesma tela repetidamente.
 2. Captura a tela e extrai texto via OCR; se o texto for idêntico ao ciclo anterior ou for curto demais para ter conteúdo legível, o ciclo é pulado ou o salvamento na memória é ignorado.
-3. Gera um "pensamento" sobre o que foi observado (Qwen2.5:3b via Ollama).
-4. A cada `CYCLES_ENTRE_PESQUISAS` ciclos, avalia se o pensamento contém uma curiosidade pesquisável; se sim, busca na web (Asas), gera um aprendizado (Qwen2.5:7b) e registra no diário e na memória imediatamente.
+3. Gera um "pensamento" sobre o que foi observado (Qwen2.5:3b em produção).
+4. A cada `CYCLES_ENTRE_PESQUISAS` ciclos, avalia se o pensamento contém uma curiosidade pesquisável; se sim, busca na web (Asas), gera um aprendizado (Llama 3.1:8b) e registra no diário e na memória imediatamente.
 5. Busca memórias relacionadas no ChromaDB.
 6. Gera uma reflexão conectando observação atual e memórias (ou uma reflexão livre, se nada relevante for encontrado).
 7. Salva pensamento e reflexão na memória persistente (quando o texto observado não é ruído).
-8. Em baixa energia ou após um marco configurável de ciclos processados, gera uma entrada de diário (Qwen2.5:7b) e a registra em `diario.md`.
+8. A cada 5 ciclos, gera uma entrada de diário (Llama 3.1:8b) e a registra em `diario.md`.
 
 Tudo é logado em `dante.log`.
 
-Os módulos novos em `dante/core/` mantêm snapshots locais de valência e
-homeostase. Ciclos sem mudança de tela ou com OCR idêntico são registrados como
-silêncio; mudanças com texto legível seguem para o pensamento. Os arquivos de
-estado ficam ignorados pelo Git junto com os demais dados locais.
+## Arquitetura Mamba (protótipo experimental)
 
-### Consolidação do diário
+A arquitetura mantém o System 1 de produção estável e oferece um fluxo stateful isolado para experimentação, mantendo o Llama 3.1:8b como System 2:
 
-Na Fase 5, o diário original permanece intacto. A cada marco configurável de
-entradas, `dante/memory/consolidation.py` seleciona sinais significativos,
-detecta possíveis contradições e grava um capítulo em `diario_capitulos.md`.
-Entradas omitidas do capítulo não são apagadas: o número de retenções e
-omissões fica registrado para inspeção. Um sumarizador do System 2 pode ser injetado,
-mas existe uma síntese local determinística como fallback.
-
-## Modelos locais
-
-O projeto usa dois papéis de modelo via Ollama:
-
-- **System 1 (Qwen2.5:3b):** responsável pela observação rápida e geração do pensamento inicial.
-- **System 2 (Qwen2.5:7b):** responsável por reflexões longas, diário, conversas e aprendizados de pesquisas.
+- **System 1 (produção):** Qwen2.5:3b, sem estado persistente experimental ativado.
+- **Protótipo Mamba:** `MambaModel` + `ModelSession`, com reset, checkpoint/restauração e isolamento por sessão.
+- **System 2 (Llama 3.1:8b):** responsável pelo diário, reflexão mais lenta e geração de aprendizados.
+- **Fallback:** a geração textual do adapter Mamba pode usar Qwen quando configurada; a geração stateful falha explicitamente quando o backend não retorna estado serializável.
+- **Limite importante:** `ollama-context` é continuação serializável de prompt, não acesso ao estado recorrente interno do Mamba.
 - **Configuração centralizada:** `config/models.yaml` define os modelos e parâmetros de geração.
 
-A configuração padrão está em `config/models.yaml` e pode ser alterada sem mexer no loop principal.
+A configuração padrão está em `config/models.yaml`; para experimentar Mamba, use uma configuração separada e chame o adapter fora do loop principal.
 
-Para testar outra base Chroma sem substituir a base ativa, defina `DANTE_CHROMA_DIR`
-com o caminho da base experimental, por exemplo `chroma_db_a2_recovered`.
+### Contexto da entrega acadêmica (Fatec)
 
-### Estado da pesquisa Dante-Mamba
+O Dante-Mamba é uma pesquisa experimental sobre continuidade de estado em agentes locais. O protótipo avalia, de forma reproduzível, se checkpoints e estado persistente melhoram a continuidade funcional em comparação com reconstrução de contexto e recuperação vetorial. As métricas planejadas incluem retenção temporal, coerência, consistência de prioridades, latência, RAM/VRAM, recuperação após reinício e vazamento entre sessões.
 
-O adapter experimental está preparado em `dante/models/mamba_model.py` e é
-selecionado somente quando `provider: mamba` for configurado. O padrão de
-produção continua sendo Qwen no System 1 e Qwen2.5:7b no System 2.
-
-O adapter já suporta checkpoints versionados, checksum e isolamento por sessão.
-Quando usado via Ollama, o estado disponível é `ollama-context`: uma
-continuação serializável de prompt, não o estado recorrente interno do Mamba.
-Burn-in, reset integrado ao loop, backend com estado interno exposto e o
-benchmark completo das condições A-D ainda são trabalho experimental pendente.
+O trabalho separa quatro condições: baseline Transformer + RAG, Mamba com reset, Mamba persistente e Mamba persistente com burn-in. Esta versão entrega o contrato stateful, reset, checkpoint/restauração e testes com Ollama real; não constitui evidência de consciência ou agência plena.
 
 ## Pré-requisitos
 
 - Python 3.10+
-- [Ollama](https://ollama.com/) instalado e rodando, com os modelos baixados:
+- [Ollama](https://ollama.com/) instalado e rodando, com os modelos de produção baixados:
   ```
   ollama pull qwen2.5:3b
-  ollama pull qwen2.5:7b
+  ollama pull llama3.1:8b
   ollama pull nomic-embed-text
   ```
 - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) instalado (com suporte ao idioma português — pacote `por`)
@@ -109,10 +116,12 @@ Com o ambiente virtual ativado, execute o script desejado diretamente:
 | `python alimentar_memoria.py` | Permite inserir manualmente um texto na memória do Dante (ex: conhecimento fundacional, conversas importantes). Cole o texto e finalize com `END`. |
 | `python ver_memorias.py` | Lista as memórias mais recentes armazenadas no ChromaDB (ID, tipo, data e prévia do conteúdo) — útil para inspecionar o que Dante já registrou. |
 
-### Scripts legados e compatibilidade
+### Outros scripts (suporte/legado)
 
-- `legacy/` — implementações anteriores de `capturador.py`, `cerebro.py`, `memoria.py` e `main.py`, preservadas para referência e compatibilidade.
-- `main.py`, `memoria.py`, `capturador.py` e `cerebro.py` — shims mínimos na raiz que encaminham para `legacy/`; o caminho ativo usa `dante/`.
+- `main.py` — versão simplificada de um único ciclo de observação (sem loop contínuo). Útil para testes rápidos.
+- `memoria.py` — funções básicas de registro e leitura de memória, usado historicamente antes do `loop_dante.py` assumir essa lógica.
+- `capturador.py` — módulo de captura de tela e OCR, usado pelos outros scripts. Pode ser executado isoladamente para testar a qualidade do OCR.
+- `cerebro.py` — módulo de geração de pensamento usado pelo `main.py` (versão de ciclo único).
 - `asas.py` — módulo de pesquisa autônoma (DuckDuckGo/`ddgs`), usado internamente pelo `loop_dante.py`. Pode ser importado isoladamente para testar buscas.
 - `test_persist.py` / `test_read.py` — scripts de teste para verificar a persistência do ChromaDB.
 
@@ -126,16 +135,11 @@ Os scripts operacionais e manuais foram centralizados na pasta `scripts/` para r
 - `scripts/limpar_memoria.py`
 - `scripts/recover_chroma.py`
 - `scripts/diagnose_chroma.py`
-- `scripts/migrar_formato_a2.py`
 - `scripts/manual/test_embed.py`
 - `scripts/manual/test_persist.py`
 - `scripts/manual/test_read.py`
 
 Os arquivos da raiz com os mesmos nomes continuam existindo como wrappers de compatibilidade.
-
-O caminho ativo da refatoração fica em `dante/`: percepção, cognição, estados
-intrínsecos, memória, ação e o ciclo testável. `loop_dante.py` permanece como
-entry point compatível.
 
 ## Testes automatizados
 
@@ -174,27 +178,6 @@ O projeto agora usa pytest com separação entre testes unitários e de integra�
 pytest --cov=dante --cov-report=html
 python benchmarks/compare_system1.py
 ```
-
-O benchmark atual é exploratório e não substitui o protocolo A-D da pesquisa.
-Ele não deve ser interpretado como evidência de ganho de continuidade de estado.
-
-### Migração do formato A2
-
-O loop salva a substância da memória em `documents` e mantém OCR, origem e
-consulta em `metadatas`. Para revisar um dump sem alterar o banco:
-
-```powershell
-python scripts/migrar_formato_a2.py --source-json backups/memorias_dump_20261007_163203.json --dry-run
-```
-
-Para reconstruir uma base separada após revisar a amostra:
-
-```powershell
-python scripts/migrar_formato_a2.py --source-json backups/memorias_dump_20261007_163203.json --output-dir chroma_db_a2_recovered --yes
-```
-
-O banco legado não é substituído automaticamente. A base recuperada pode ser
-testada com `DANTE_CHROMA_DIR=chroma_db_a2_recovered`.
 
 ### Testes com Ollama (opcional)
 
@@ -246,6 +229,6 @@ Quando necessário, publique apenas modelos sem segredo, como `.env.example`.
 
 - A base do ChromaDB (`chroma_db/`) é persistente entre execuções do `loop_dante.py` — a memória acumulada não é apagada ao reiniciar.
 - `dante.log` e `diario.md` são ignorados pelo Git (dados pessoais/experimentais do Guto), mas são gerados localmente a cada execução.
-- O diário (`diario.md`) tende a ser o output de maior qualidade introspectiva do sistema, gerado pelo Qwen2.5:7b quando a energia está baixa ou um marco configurável é atingido. O prompt evita pedir que Dante reproduza o conteúdo observado diretamente, para reduzir recusas do modelo em telas com conteúdo sensível ou ambíguo.
+- O diário (`diario.md`) tende a ser o output de maior qualidade introspectiva do sistema, gerado pelo Llama 3.1:8b a cada 5 ciclos do loop. O prompt evita pedir que Dante reproduza o conteúdo observado diretamente, para reduzir recusas do modelo em telas com conteúdo sensível ou ambíguo.
 - Textos extraídos por OCR com menos de 30 caracteres são tratados como ruído: o ciclo ainda gera pensamento/reflexão, mas nada é salvo na memória persistente.
 - A pesquisa autônoma (Asas) roda no máximo a cada `CYCLES_ENTRE_PESQUISAS` ciclos (padrão: 8) e só dispara quando o detector de curiosidade do System 1 identifica uma pergunta genuína no pensamento atual.# Dante (MiniIA)
