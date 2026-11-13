@@ -91,3 +91,5 @@ values.json
 self_model.json
 relationship_model.json
 auditoria_duplicatas.json
+__pycache__/capturador.cpython-313.pyc
+
